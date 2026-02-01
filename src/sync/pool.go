@@ -293,6 +293,7 @@ var (
 	oldPools []*Pool
 )
 
+// 初始化、先向runtime注册一个poolCleanup清理函数，注册函数实际在runtime包中的mgc.go文件中使用了linkname方式来实现的
 func init() {
 	runtime_registerPoolCleanup(poolCleanup)
 }
@@ -302,7 +303,7 @@ func indexLocal(l unsafe.Pointer, i int) *poolLocal {
 	return (*poolLocal)(lp)
 }
 
-// Implemented in runtime.
+// Implemented in runtime. 实际实现在runtime包中的mgc.go文件中使用了linkname方式来实现的
 func runtime_registerPoolCleanup(cleanup func())
 func runtime_procPin() int
 func runtime_procUnpin()

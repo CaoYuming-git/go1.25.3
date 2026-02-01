@@ -739,6 +739,7 @@ func gcStart(trigger gcTrigger) {
 
 	now := nanotime()
 	work.tSweepTerm = now
+	//STW开始
 	var stw worldStop
 	systemstack(func() {
 		stw = stopTheWorldWithSema(stwGCSweepTerm)
@@ -752,6 +753,7 @@ func gcStart(trigger gcTrigger) {
 		finishsweep_m()
 	})
 
+	//清理sync.Pool池子
 	// clearpools before we start the GC. If we wait the memory will not be
 	// reclaimed until the next GC cycle.
 	clearpools()
@@ -772,6 +774,7 @@ func gcStart(trigger gcTrigger) {
 		schedEnableUser(false)
 	}
 
+	//设置进入标记阶段状态，并开启写屏障，注意，这里只是设置进入标记状态，并没有实际开始，因为STW还没有结束
 	// Enter concurrent mark phase and enable
 	// write barriers.
 	//
@@ -816,6 +819,7 @@ func gcStart(trigger gcTrigger) {
 	// to be comparable.
 	work.cpuStats.accumulateGCPauseTime(nanotime()-stw.finishedStopping, work.maxprocs)
 
+	//STW 结束
 	// Concurrent mark.
 	systemstack(func() {
 		now = startTheWorldWithSema(0, stw)
