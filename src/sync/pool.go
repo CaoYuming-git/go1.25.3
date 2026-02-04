@@ -49,17 +49,21 @@ import (
 //
 // [the Go memory model]: https://go.dev/ref/mem
 type Pool struct {
+	// 防止pool被拷贝的一个声明类型(供go vet检查)
 	noCopy noCopy
-
-	local     unsafe.Pointer // local fixed-size per-P pool, actual type is [P]poolLocal
-	localSize uintptr        // size of the local array
-
-	victim     unsafe.Pointer // local from previous cycle
-	victimSize uintptr        // size of victims array
+	// 本地缓存对象池：按P划分的本地固定大小的对象池，实际类型是[P]poolLocal
+	local unsafe.Pointer // local fixed-size per-P pool, actual type is [P]poolLocal
+	// 本地缓存对象池的大小，即元素数量，即P的数量(GOMAXPROCS)
+	localSize uintptr // size of the local array
+	// 受害者对象池：上一次GC后的本地缓存对象池(local)
+	victim unsafe.Pointer // local from previous cycle
+	// 受害者对象池的大小，即元素数量，也是P的数量(GOMAXPROCS)
+	victimSize uintptr // size of victims array
 
 	// New optionally specifies a function to generate
 	// a value when Get would otherwise return nil.
 	// It may not be changed concurrently with calls to Get.
+	// 生成新对象时使用的方法
 	New func() any
 }
 
@@ -253,6 +257,11 @@ func (p *Pool) pinSlow() (*poolLocal, int) {
 // Do not remove or change the type signature.
 // See go.dev/issue/67401.
 //
+// pool中的对象清理函数，会在gc开始时调用
+// 1、将上一轮gc留下的oldPools中的受害者对象池(victim)置空，即去除引用关系，才能让后面的gc回收掉
+// 2、将本轮gc中的allPools中的本地缓存对象池(local)转换为受害者对象池(victim)，即不直接将本地缓存对象池清空回收，而是给一个缓冲时间，在下一轮gc回收掉
+// 3、更新allPools和oldPools集合
+//
 //go:linkname poolCleanup
 func poolCleanup() {
 	// This function is called with the world stopped, at the beginning of a garbage collection.
@@ -262,12 +271,15 @@ func poolCleanup() {
 	// pinned section (in effect, this has all Ps pinned).
 
 	// Drop victim caches from all pools.
+	//对旧池子中的受害者对象池(victim)清空，即缓存的对象此时才可能被gc回收，也就是说缓存的对象至少会存在两个gc周期，
+	//第一个gc周期会从local变为victim，第二个gc周期才会通过victim=nil，去掉引用关系，才能让缓存对象被gc回收
 	for _, p := range oldPools {
 		p.victim = nil
 		p.victimSize = 0
 	}
 
 	// Move primary cache to victim cache.
+	//将新pool实例中的本地缓存对象池(local)转换为受害者对象池(victim)，即第一次gc周期不会直接把缓存对象回收，而是在第二个周期，即上面的代码去掉引用关系后被gc回收
 	for _, p := range allPools {
 		p.victim = p.local
 		p.victimSize = p.localSize
@@ -277,19 +289,25 @@ func poolCleanup() {
 
 	// The pools with non-empty primary caches now have non-empty
 	// victim caches and no pools have primary caches.
+	//1、上面已经清空了oldPools中的受害者对象池(victim)，所以原来的oldPools中的pool实例已经不算是oldPool了，更不算是allPool对象了，因为既没有本地缓存对象池(local)，又没有受害者对象池(victim)
+	//2、上面把allPools中的本地缓存对象池(local)转换为了受害者对象池(victim)，所以现在的allPools中的pool实例已经不算是allPool了，已经变成了oldPool
+	//所以这里更新oldPool、allPools集合
 	oldPools, allPools = allPools, nil
 }
 
 var (
+	//锁，保护allPools
 	allPoolsMu Mutex
 
 	// allPools is the set of pools that have non-empty primary
 	// caches. Protected by either 1) allPoolsMu and pinning or 2)
 	// STW.
+	// 是一组具有主缓存对象(即本地缓存对象池(local)中存在缓存对象)的pool实例集合
 	allPools []*Pool
 
 	// oldPools is the set of pools that may have non-empty victim
 	// caches. Protected by STW.
+	// 是一组具有受害者对象池(victim)的pool实例集合，每次gc，allPools会变为oldPools
 	oldPools []*Pool
 )
 
