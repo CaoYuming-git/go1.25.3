@@ -68,16 +68,24 @@ type Pool struct {
 }
 
 // Local per-P Pool appendix.
+// P本地池底层数据的结构
 type poolLocalInternal struct {
-	private any       // Can be used only by the respective P.
-	shared  poolChain // Local P can pushHead/popHead; any P can popTail.
+	//P私有的【1个】缓存对象，仅供P使用
+	private any // Can be used only by the respective P.
+	//可共享的【多个】缓存对象，可被其他P偷。
+	//是一个双向链表，P自己只能从head取和存，其他P只能从tail取
+	shared poolChain // Local P can pushHead/popHead; any P can popTail.
 }
 
+// 每个P自己的本地池
 type poolLocal struct {
+	//真正存储数据的部分
 	poolLocalInternal
 
 	// Prevents false sharing on widespread platforms with
 	// 128 mod (cache line size) = 0 .
+	//不同cpu访问不同变量，如果这些变量落在同一个cache line中，会导致缓存不停失效，性能严重下降
+	//一般cpu cache line通常是64字节，go这里使用128字节对齐，为了让每个poolLocal的起始地址都落在不同的cache line上。
 	pad [128 - unsafe.Sizeof(poolLocalInternal{})%128]byte
 }
 
