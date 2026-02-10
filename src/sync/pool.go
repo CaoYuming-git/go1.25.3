@@ -140,10 +140,24 @@ func (p *Pool) Put(x any) {
 //
 // If Get would otherwise return nil and p.New is non-nil, Get returns
 // the result of calling p.New.
+// 从Pool获取一个对象
 func (p *Pool) Get() any {
+	//如果是以-race构建的，临时关闭race检测，自己来处理数据竞争
 	if race.Enabled {
 		race.Disable()
 	}
+	//p.pin()的作用有：
+	//1、将g固定到p上，禁止g被迁移到其他p上，这样就能保证g在Get/Put的时候，如果从自己p的poolLocal中获取和还回时，几乎是不需要加锁(只访问poolLocal.private时)：
+	//	1.1、对于p的poolLocal.private，同时只会被p自己的一个g访问，不需要加锁
+	//	1.2、但是对于p的poolLocal.shared，同时可能有多个g访问，需要加锁(不是使用mutex，使用的是CAS和轮询)
+	//否则，如果没有把g固定到p上，g在Get/Put的时候，从p1迁移到了p2，会出现数据竞争的情况，比如：
+	//(1)开始在 P0
+	//(2)读了 local[0].private
+	//(3)goroutine 被抢占
+	//(4)在 P1 上恢复
+	//(5)写的还是 local[0].private，此时P0上有另一个g也正在写local[0].private
+	//就会出现数据竞争，要保证正常运行地加锁才行
+	//2、返回p对应的localPool
 	l, pid := p.pin()
 	x := l.private
 	l.private = nil
@@ -211,6 +225,8 @@ func (p *Pool) getSlow(pid int) any {
 // pin pins the current goroutine to P, disables preemption and
 // returns poolLocal pool for the P and the P's id.
 // Caller must call runtime_procUnpin() when done with the pool.
+// 将g固定到p上，并返回该p的缓冲池poolLocal(如果没有则还会为p创建poolLocal返回)。
+// 会保证g不迁移到其他p上，在访问poolLocal.private时可以保证只有p自己的的一个g访问，可以避免数据竞争
 func (p *Pool) pin() (*poolLocal, int) {
 	// Check whether p is nil to get a panic.
 	// Otherwise the nil dereference happens while the m is pinned,
@@ -219,16 +235,21 @@ func (p *Pool) pin() (*poolLocal, int) {
 		panic("nil Pool")
 	}
 
+	//将当前goroutine固定到p上，在pin期间保证goroutine不会迁移到其他P上执行，并返回p的id
 	pid := runtime_procPin()
 	// In pinSlow we store to local and then to localSize, here we load in opposite order.
 	// Since we've disabled preemption, GC cannot happen in between.
 	// Thus here we must observe local at least as large localSize.
 	// We can observe a newer/larger local, it is fine (we must observe its zero-initialized-ness).
+	//获取localSize的值，即poolLocal的数量
 	s := runtime_LoadAcquintptr(&p.localSize) // load-acquire
-	l := p.local                              // load-consume
+	//获取Pool的local缓冲池数组
+	l := p.local // load-consume
+	//如果当前p缓冲池存在(即当前Pool为这个P分配了poolLocal)，则取出来返回
 	if uintptr(pid) < s {
 		return indexLocal(l, pid), pid
 	}
+	//如果当前p缓冲池不存在(即当前Pool还没有为这个P分配poolLocal)，则为P创建localPool
 	return p.pinSlow()
 }
 

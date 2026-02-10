@@ -7447,13 +7447,18 @@ func setMaxThreads(in int) (out int) {
 // Do not remove or change the type signature.
 // See go.dev/issue/67401.
 //
+// 将当前g固定到p中，禁止g迁移到其他p中去，并返回p的id
+//
 //go:linkname procPin
 //go:nosplit
 func procPin() int {
+	//获取当前的goroutine
 	gp := getg()
+	//获取当前g所属的m
 	mp := gp.m
-
+	//对m的锁自增，这里是实现g不会迁移到其他p的具体实现，因为在调度的时候会判断这个字段，如果不为0，不会把g调度到其他p中去
 	mp.locks++
+	//返回m绑定的逻辑处理器p的id
 	return int(mp.p.ptr().id)
 }
 
