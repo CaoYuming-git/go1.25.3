@@ -249,10 +249,11 @@ func (p *Pool) pin() (*poolLocal, int) {
 	if uintptr(pid) < s {
 		return indexLocal(l, pid), pid
 	}
-	//如果当前p缓冲池不存在(即当前Pool还没有为这个P分配poolLocal)，则为P创建localPool
+	//如果当前p缓冲池不存在(即当前Pool还没有为这个P分配poolLocal)，则为P创建localPool  todo
 	return p.pinSlow()
 }
 
+// todo
 func (p *Pool) pinSlow() (*poolLocal, int) {
 	// Retry under the mutex.
 	// Can not lock the mutex while pinned.
