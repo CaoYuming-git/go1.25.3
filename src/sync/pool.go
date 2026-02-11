@@ -184,6 +184,7 @@ func (p *Pool) Get() any {
 			race.Acquire(poolRaceAddr(x))
 		}
 	}
+	//如果没有获取到，则创建一个对象返回
 	if x == nil && p.New != nil {
 		x = p.New()
 	}
