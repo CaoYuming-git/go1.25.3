@@ -234,6 +234,7 @@ func (p *Pool) getSlow(pid int) any {
 
 	// Mark the victim cache as empty for future gets don't bother
 	// with it.
+	//如果victim中没有获取到，则把victimSize标记为0，后续再次调用时，会在前面判断直接跳过victim获取的步骤了
 	atomic.StoreUintptr(&p.victimSize, 0)
 
 	return nil
