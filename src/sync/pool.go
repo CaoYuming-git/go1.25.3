@@ -140,7 +140,11 @@ func (p *Pool) Put(x any) {
 //
 // If Get would otherwise return nil and p.New is non-nil, Get returns
 // the result of calling p.New.
-// 从Pool获取一个对象
+// 从Pool获取一个对象：流程是：
+// 1、将g固定到p
+// 2、获取p自己的localPool(如果没有则会初始化创建)，称为l
+// 3、先从l.private中获取对象(无锁，只有自己所属的p访问，无并发)
+// 4、如果l.private没有，则从l.shared中的head(最新节点)获取
 func (p *Pool) Get() any {
 	//如果是以-race构建的，临时关闭race检测，自己来处理数据竞争
 	if race.Enabled {
@@ -157,16 +161,19 @@ func (p *Pool) Get() any {
 	//(4)在 P1 上恢复
 	//(5)写的还是 local[0].private，此时P0上有另一个g也正在写local[0].private
 	//就会出现数据竞争，要保证正常运行地加锁才行
-	//2、返回p对应的localPool
+	//2、返回p对应的localPool(如果没有localPool，则会为所有p创建localPool，因为pool实例中的所有p的localPool是一次性同时创建的)
 	l, pid := p.pin()
+	//从localPool.private取(无锁，因为无并发)
 	x := l.private
 	l.private = nil
 	if x == nil {
 		// Try to pop the head of the local shard. We prefer
 		// the head over the tail for temporal locality of
 		// reuse.
+		//如果l.private没有，则从l.shared链表的最新节点->最旧节点方向遍历节点的双向队列的头部取对象
 		x, _ = l.shared.popHead()
 		if x == nil {
+			//如果l.shared没有取到对象，则调用缓慢获取对象方法，获取的优先级是： 从其他p的shared链表偷->victim尝试获取(本p->其他p)
 			x = p.getSlow(pid)
 		}
 	}
@@ -183,11 +190,16 @@ func (p *Pool) Get() any {
 	return x
 }
 
+// 缓慢方式获取对象，流程如下：
+// 1、先尝试从其他p的poolLocal中偷对象，同时会把链表中的空对象节点剔除掉。
+// 2、如果没有偷到，再去Pool中的victim中尝试获取(先从victim自己p的poolLocal获取，再尝试从victim其他p的poolLocal获取)
 func (p *Pool) getSlow(pid int) any {
 	// See the comment in pin regarding ordering of the loads.
+	//local的元素格式，即p的数量
 	size := runtime_LoadAcquintptr(&p.localSize) // load-acquire
 	locals := p.local                            // load-consume
 	// Try to steal one element from other procs.
+	//尝试从其他p的poolLocal中去偷对象(从最旧节点向最新节点遍历，期间如果发现节点对象空了，还会把节点从链表中剔除掉)
 	for i := 0; i < int(size); i++ {
 		l := indexLocal(locals, (pid+i+1)%int(size))
 		if x, _ := l.shared.popTail(); x != nil {
@@ -198,16 +210,21 @@ func (p *Pool) getSlow(pid int) any {
 	// Try the victim cache. We do this after attempting to steal
 	// from all primary caches because we want objects in the
 	// victim cache to age out if at all possible.
+
+	//判断victim是否有这个p的poolLocal，没有直接返回(可能出现P数量变化的情况导致)
 	size = atomic.LoadUintptr(&p.victimSize)
 	if uintptr(pid) >= size {
 		return nil
 	}
+	//尝试从victim中获取对象
 	locals = p.victim
 	l := indexLocal(locals, pid)
+	//先从victim中p的private获取
 	if x := l.private; x != nil {
 		l.private = nil
 		return x
 	}
+	//如果没有再从victim中的所有p的shared链表中去获取
 	for i := 0; i < int(size); i++ {
 		l := indexLocal(locals, (pid+i)%int(size))
 		if x, _ := l.shared.popTail(); x != nil {
@@ -225,7 +242,7 @@ func (p *Pool) getSlow(pid int) any {
 // pin pins the current goroutine to P, disables preemption and
 // returns poolLocal pool for the P and the P's id.
 // Caller must call runtime_procUnpin() when done with the pool.
-// 将g固定到p上，并返回该p的缓冲池poolLocal(如果没有则还会为p创建poolLocal返回)。
+// 将g固定到p上，并返回该p的缓冲池poolLocal(如果没有则还会为p创建poolLocal返回，调用pinSlow实现)。
 // 会保证g不迁移到其他p上，在访问poolLocal.private时可以保证只有p自己的的一个g访问，可以避免数据竞争
 func (p *Pool) pin() (*poolLocal, int) {
 	// Check whether p is nil to get a panic.
@@ -249,29 +266,36 @@ func (p *Pool) pin() (*poolLocal, int) {
 	if uintptr(pid) < s {
 		return indexLocal(l, pid), pid
 	}
-	//如果当前p缓冲池不存在(即当前Pool还没有为这个P分配poolLocal)，则为P创建localPool  todo
+	//如果当前p缓冲池不存在(即当前Pool还没有为这个P分配poolLocal)，则为p创建localPool(实际是为所有p重新创建分配localPool)
 	return p.pinSlow()
 }
 
-// todo
+// 慢固定：将g固定到p上，并返回该p的缓冲池poolLocal(如果没有则还会为所有p创建poolLocal返回)。
 func (p *Pool) pinSlow() (*poolLocal, int) {
 	// Retry under the mutex.
 	// Can not lock the mutex while pinned.
+	//取消将g固定到p中
 	runtime_procUnpin()
+	//对allPool加锁
 	allPoolsMu.Lock()
 	defer allPoolsMu.Unlock()
+	//将g固定到p中
 	pid := runtime_procPin()
 	// poolCleanup won't be called while we are pinned.
 	s := p.localSize
 	l := p.local
+	//再尝试从p的poolLocal数组中取一次
 	if uintptr(pid) < s {
 		return indexLocal(l, pid), pid
 	}
+	//如果此时该g所属的p还没有分配poolLocal，则将这个pool实例加入allPools中，然后为所有的p重新创建poolLocal(所有的p的poolLocal是一起创建的)
 	if p.local == nil {
 		allPools = append(allPools, p)
 	}
 	// If GOMAXPROCS changes between GCs, we re-allocate the array and lose the old one.
+	//获取当前可用的p数量
 	size := runtime.GOMAXPROCS(0)
+	//创建p个poolLocal
 	local := make([]poolLocal, size)
 	atomic.StorePointer(&p.local, unsafe.Pointer(&local[0])) // store-release
 	runtime_StoreReluintptr(&p.localSize, uintptr(size))     // store-release
@@ -288,7 +312,8 @@ func (p *Pool) pinSlow() (*poolLocal, int) {
 // See go.dev/issue/67401.
 //
 // pool中的对象清理函数，会在gc开始时调用
-// 1、将上一轮gc留下的oldPools中的受害者对象池(victim)置空，即去除引用关系，才能让后面的gc回收掉
+// 1、将
+// 上一轮gc留下的oldPools中的受害者对象池(victim)置空，即去除引用关系，才能让后面的gc回收掉
 // 2、将本轮gc中的allPools中的本地缓存对象池(local)转换为受害者对象池(victim)，即不直接将本地缓存对象池清空回收，而是给一个缓冲时间，在下一轮gc回收掉
 // 3、更新allPools和oldPools集合
 //
@@ -332,7 +357,7 @@ var (
 	// allPools is the set of pools that have non-empty primary
 	// caches. Protected by either 1) allPoolsMu and pinning or 2)
 	// STW.
-	// 是一组具有主缓存对象(即本地缓存对象池(local)中存在缓存对象)的pool实例集合
+	// 是已经初始化poolLocal的Pool实例集合，会在pinSlow的时候初始化poolLocal时加入到这个全局变量中去，gc的时候会使用到
 	allPools []*Pool
 
 	// oldPools is the set of pools that may have non-empty victim

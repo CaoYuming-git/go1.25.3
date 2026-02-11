@@ -109,8 +109,10 @@ func (d *poolDequeue) pushHead(val any) bool {
 // popHead removes and returns the element at the head of the queue.
 // It returns false if the queue is empty. It must only be called by a
 // single producer.
+// 从poolDequeue双向队列的头部取对象，这个操作只会被单个生产者调用(所属的p)
 func (d *poolDequeue) popHead() (any, bool) {
 	var slot *eface
+	//循环CAS获取一个对象
 	for {
 		ptrs := d.headTail.Load()
 		head, tail := d.unpack(ptrs)
@@ -144,8 +146,10 @@ func (d *poolDequeue) popHead() (any, bool) {
 // popTail removes and returns the element at the tail of the queue.
 // It returns false if the queue is empty. It may be called by any
 // number of consumers.
+// 从poolDequeue双向队列的尾部取对象，这个操作会被多个生产者调用(其他p)
 func (d *poolDequeue) popTail() (any, bool) {
 	var slot *eface
+	//循环CAS获取一个对象
 	for {
 		ptrs := d.headTail.Load()
 		head, tail := d.unpack(ptrs)
@@ -191,17 +195,21 @@ func (d *poolDequeue) popTail() (any, bool) {
 // dequeue fills up, this allocates a new one and only ever pushes to
 // the latest dequeue. Pops happen from the other end of the list and
 // once a dequeue is exhausted, it gets removed from the list.
+// 链表
 type poolChain struct {
 	// head is the poolDequeue to push to. This is only accessed
 	// by the producer, so doesn't need to be synchronized.
+	// 最新的节点，这里不是指头节点，它的前驱节点是稍微旧一点的节点，并不是nil，和双向链表有点区别。且只被生产者访问(所属的p)
 	head *poolChainElt
 
 	// tail is the poolDequeue to popTail from. This is accessed
 	// by consumers, so reads and writes must be atomic.
+	// 最旧的节点。只被消费者访问(就是其他P，不是这个链表所属的P，会在偷取的时候访问)
 	tail atomic.Pointer[poolChainElt]
 }
 
 type poolChainElt struct {
+	//底层数据存储的环形缓冲区
 	poolDequeue
 
 	// next and prev link to the adjacent poolChainElts in this
@@ -214,6 +222,7 @@ type poolChainElt struct {
 	// prev is written atomically by the consumer and read
 	// atomically by the producer. It only transitions from
 	// non-nil to nil.
+	// next:更新的节点，prev:更旧的节点
 	next, prev atomic.Pointer[poolChainElt]
 }
 
@@ -248,8 +257,10 @@ func (c *poolChain) pushHead(val any) {
 	d2.pushHead(val)
 }
 
+// 从shared链表的最新节点->最旧节点方向遍历每个节点，直到取到一个对象就返回。这个方法只会被生产者调用(就是所属的p自己)，但是不表示对节点的访问不是只有这一个方法，所以还是要考虑数据竞争的
 func (c *poolChain) popHead() (any, bool) {
 	d := c.head
+	//从最新的节点向旧节点遍历，从每个节点的头部取
 	for d != nil {
 		if val, ok := d.popHead(); ok {
 			return val, ok
@@ -261,12 +272,15 @@ func (c *poolChain) popHead() (any, bool) {
 	return nil, false
 }
 
+// 从shared链表的最旧节点->最新节点方向遍历每个节点，从节点的尾部取对象，直到取到一个对象就返回，会被消费者调用(就是除自己意外的其他p偷取)
+// 遍历的时候如果发现节点的对象为空(即没有取到对象)，则将节点从链表中剔除
 func (c *poolChain) popTail() (any, bool) {
 	d := c.tail.Load()
 	if d == nil {
 		return nil, false
 	}
 
+	//从最旧的节点向新节点遍历，从每个节点的尾部取
 	for {
 		// It's important that we load the next pointer
 		// *before* popping the tail. In general, d may be
@@ -274,12 +288,14 @@ func (c *poolChain) popTail() (any, bool) {
 		// the pop and the pop fails, then d is permanently
 		// empty, which is the only condition under which it's
 		// safe to drop d from the chain.
+		//获取更新的一个节点
 		d2 := d.next.Load()
 
+		//从节点的双向队列的尾部获取对象，获取到则直接返回
 		if val, ok := d.popTail(); ok {
 			return val, ok
 		}
-
+		//表示没有节点了，全部遍历完了还没有获取到，直接返回
 		if d2 == nil {
 			// This is the only dequeue. It's empty right
 			// now, but could be pushed to in the future.
@@ -290,6 +306,7 @@ func (c *poolChain) popTail() (any, bool) {
 		// to the next dequeue. Try to drop it from the chain
 		// so the next pop doesn't have to look at the empty
 		// dequeue again.
+		//表示当前节点没有对象可供获取，将节点从链表剔除
 		if c.tail.CompareAndSwap(d, d2) {
 			// We won the race. Clear the prev pointer so
 			// the garbage collector can collect the empty

@@ -7472,6 +7472,8 @@ func procPin() int {
 // Do not remove or change the type signature.
 // See go.dev/issue/67401.
 //
+// 取消g固定到p中的限制
+//
 //go:linkname procUnpin
 //go:nosplit
 func procUnpin() {
