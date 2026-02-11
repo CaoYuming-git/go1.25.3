@@ -192,15 +192,15 @@ func (p *Pool) Get() any {
 }
 
 // 缓慢方式获取对象，流程如下：
-// 1、先尝试从其他p的poolLocal中偷对象，同时会把链表中的空对象节点剔除掉。
-// 2、如果没有偷到，再去Pool中的victim中尝试获取(先从victim自己p的poolLocal获取，再尝试从victim其他p的poolLocal获取)
+// 1、先尝试从其他p的poolLocal.shared中偷对象，同时会把链表中的空对象节点剔除掉。
+// 2、如果没有偷到，再去Pool中的victim中尝试获取(先从victim自己p的poolLocal.private获取，再尝试从victim所有p的poolLocal.shared获取)
 func (p *Pool) getSlow(pid int) any {
 	// See the comment in pin regarding ordering of the loads.
 	//local的元素格式，即p的数量
 	size := runtime_LoadAcquintptr(&p.localSize) // load-acquire
 	locals := p.local                            // load-consume
 	// Try to steal one element from other procs.
-	//尝试从其他p的poolLocal中去偷对象(从最旧节点向最新节点遍历，期间如果发现节点对象空了，还会把节点从链表中剔除掉)
+	//尝试从其他p的poolLocal.shared中去偷对象(从最旧节点向最新节点遍历，期间如果发现节点对象空了，还会把节点从链表中剔除掉)
 	for i := 0; i < int(size); i++ {
 		l := indexLocal(locals, (pid+i+1)%int(size))
 		if x, _ := l.shared.popTail(); x != nil {
