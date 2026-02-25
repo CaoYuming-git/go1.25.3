@@ -16,6 +16,7 @@ import (
 // It has the added feature that it nils out unused slots to avoid
 // unnecessary retention of objects. This is important for sync.Pool,
 // but not typically a property considered in the literature.
+// 双端队列，poolChain链表节点中的底层存储结构
 type poolDequeue struct {
 	// headTail packs together a 32-bit head index and a 32-bit
 	// tail index. Both are indexes into vals modulo len(vals)-1.
@@ -31,6 +32,7 @@ type poolDequeue struct {
 	// The head index is stored in the most-significant bits so
 	// that we can atomically add to it and the overflow is
 	// harmless.
+	//队头队尾位置，头部只会被生产者访问(本地P从对头存取)，尾部只会被消费者访问(其他P从队尾取)
 	headTail atomic.Uint64
 
 	// vals is a ring buffer of interface{} values stored in this
@@ -209,6 +211,7 @@ type poolChain struct {
 	tail atomic.Pointer[poolChainElt]
 }
 
+// poolChain链表中的节点，底层是一个poolDequeue，是一个双端队列，视为一个环形缓冲区
 type poolChainElt struct {
 	//底层数据存储的双端队列
 	poolDequeue
