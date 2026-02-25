@@ -133,7 +133,8 @@ func (p *Pool) Put(x any) {
 		//如果poolLocal.private空，则存到private中
 		l.private = x
 	} else {
-		//如果poolLocal.private有值了，则放到poolLocal.shared中去
+		//如果poolLocal.private有值了，则放到poolLocal.shared链表head节点(最新节点)的双端队列的队头去
+		//如果当前head节点的双端队列满了，则新增一个节点，添加进去，并作为链表的新头节点
 		l.shared.pushHead(x)
 	}
 	runtime_procUnpin()

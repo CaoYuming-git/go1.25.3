@@ -79,6 +79,7 @@ func (d *poolDequeue) pack(head, tail uint32) uint64 {
 
 // pushHead adds val at the head of the queue. It returns false if the
 // queue is full. It must only be called by a single producer.
+// 添加对象到poolDequeue双端队列的队头，如果队列满了则返回false，只会被单个生产者调用(所属的p)
 func (d *poolDequeue) pushHead(val any) bool {
 	ptrs := d.headTail.Load()
 	head, tail := d.unpack(ptrs)
@@ -230,6 +231,7 @@ type poolChainElt struct {
 	next, prev atomic.Pointer[poolChainElt]
 }
 
+// 存储对象到指定p的localPool.shared链表的head节点的双端队列的队头去，如果当前head节点的双端队列满了，则新增一个节点，添加进去，并作为链表的新头节点
 func (c *poolChain) pushHead(val any) {
 	d := c.head
 	if d == nil {
@@ -241,21 +243,21 @@ func (c *poolChain) pushHead(val any) {
 		c.tail.Store(d)
 	}
 
-	//将对象添加到最新节点的双端队列中去
+	//将对象添加到最新节点的双端队列的队头中去
 	if d.pushHead(val) {
 		return
 	}
 
 	// The current dequeue is full. Allocate a new one of twice
 	// the size.
-	//添加节点失败，说明节点的队列满了，则创建一个新节点，大小为当前节点的两倍(最大不超过dequeueLimit)
+	//添加到head节点失败，说明节点的队列满了，则创建一个新节点，大小为当前节点的两倍(最大不超过dequeueLimit)
 	newSize := len(d.vals) * 2
 	if newSize >= dequeueLimit {
 		// Can't make it any bigger.
 		newSize = dequeueLimit
 	}
 
-	//将新节点作为head(最新的节点)
+	//将新节点作为head节点(最新的节点)
 	d2 := &poolChainElt{}
 	d2.prev.Store(d)
 	d2.vals = make([]eface, newSize)
