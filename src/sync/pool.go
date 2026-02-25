@@ -140,27 +140,21 @@ func (p *Pool) Put(x any) {
 //
 // If Get would otherwise return nil and p.New is non-nil, Get returns
 // the result of calling p.New.
-// 从Pool获取一个对象：流程是：
+// 从Pool获取一个对象，获取顺序是：
 // 1、将g固定到p,并返回p自己的localPool(如果没有则会初始化创建)，称为l
 // 2、先从l.private(p私有的对象)中获取对象(无锁，只有自己所属的p访问，无并发)
-// 3、如果l.private没有，则从l.shared(p中可被其他p共享的对象链表)中的head(最新节点)获取
+// 3、如果l.private没有，则从l.shared(p中可被其他p共享的对象链表)中的head(最新节点)->tail(最旧节点)遍历节点获取
+// 4、如果l.shared中没有，则从其他p的localPool.shared中的tail(最旧节点)->head(最新节点)遍历节点偷取
+// 5、如果其他p的shared没有，则从Pool.victim中获取
+// (5.1)、先从victim中p自己的private获取
+// (5.2)、再从victim中的所有p的shared链表中去获取
+// 6、如果victim中没有，则生成一个(调用New函数)返回
 func (p *Pool) Get() any {
 	//如果是以-race构建的，临时关闭race检测，自己来处理数据竞争
 	if race.Enabled {
 		race.Disable()
 	}
-	//p.pin()的作用有：
-	//1、将g固定到p上，禁止g被迁移到其他p上，这样就能保证g在Get/Put的时候，如果从自己p的poolLocal中获取和还回时，几乎是不需要加锁(只访问poolLocal.private时)：
-	//	1.1、对于p的poolLocal.private，同时只会被p自己的一个g访问，不需要加锁
-	//	1.2、但是对于p的poolLocal.shared，同时可能有多个g访问，需要加锁(不是使用mutex，使用的是CAS和轮询)
-	//否则，如果没有把g固定到p上，g在Get/Put的时候，从p1迁移到了p2，会出现数据竞争的情况，比如：
-	//(1)开始在 P0
-	//(2)读了 local[0].private
-	//(3)goroutine 被抢占
-	//(4)在 P1 上恢复
-	//(5)写的还是 local[0].private，此时P0上有另一个g也正在写local[0].private
-	//就会出现数据竞争，要保证正常运行地加锁才行
-	//2、返回p对应的localPool(如果没有localPool，则会为所有p创建localPool，因为pool实例中的所有p的localPool是一次性同时创建的)
+	//将g固定到p上，并返回该p的缓冲池poolLocal(如果没有则创建poolLocal返回)
 	l, pid := p.pin()
 	//从localPool.private取，p私有的，不共享(无锁，因为无并发)
 	x := l.private
@@ -183,7 +177,7 @@ func (p *Pool) Get() any {
 			race.Acquire(poolRaceAddr(x))
 		}
 	}
-	//如果没有获取到，则创建一个对象返回
+	//如果都没有获取到，则创建一个对象返回
 	if x == nil && p.New != nil {
 		x = p.New()
 	}
@@ -195,7 +189,7 @@ func (p *Pool) Get() any {
 // 2、如果没有偷到，再去Pool中的victim中尝试获取(先从victim自己p的poolLocal.private获取，再尝试从victim所有p的poolLocal.shared获取)
 func (p *Pool) getSlow(pid int) any {
 	// See the comment in pin regarding ordering of the loads.
-	//local的元素格式，即p的数量
+	//local的元素个数，即p的数量
 	size := runtime_LoadAcquintptr(&p.localSize) // load-acquire
 	locals := p.local                            // load-consume
 	// Try to steal one element from other procs.
@@ -243,8 +237,19 @@ func (p *Pool) getSlow(pid int) any {
 // pin pins the current goroutine to P, disables preemption and
 // returns poolLocal pool for the P and the P's id.
 // Caller must call runtime_procUnpin() when done with the pool.
-// 将g固定到p上，并返回该p的缓冲池poolLocal(如果没有则还会为p创建poolLocal返回，调用pinSlow实现)。
-// 会保证g不迁移到其他p上，在访问poolLocal.private时可以保证只有p自己的的一个g访问，可以避免数据竞争
+/*
+功能：将g固定到p上，并返回该p的缓冲池poolLocal，注意：如果没有则还会为所有p创建poolLocal(pool实例中的所有p的localPool是一次性同时创建的)，调用pinSlow实现
+【关键点】将g固定到p上，会禁止g被迁移到其他p上：
+1、这样能保证g访问所属p的poolLocal.private时，几乎是不需要加锁，因为p只会有自己这1个g在访问poolLocal.private，不会出现并行导致的数据竞争。
+   否则，如果没有把g固定到p上，g访问所属p的poolLocal.private时，从p1迁移到了p2，会出现数据竞争的情况，比如以下场景时：
+	(1)goroutine 开始在 P0
+	(2)读了 local[0].private
+	(3)goroutine 被抢占
+	(4)在 P1 上恢复
+	(5)写的还是 local[0].private，此时P0上有另一个g也正在写local[0].private
+	就会出现数据竞争，要保证正常运行地加锁才行
+2、但是g访问所属p的poolLocal.shared时，因为同时可能有多个g访问，还是需要加锁(不是使用mutex，使用的是CAS和轮询)
+*/
 func (p *Pool) pin() (*poolLocal, int) {
 	// Check whether p is nil to get a panic.
 	// Otherwise the nil dereference happens while the m is pinned,
@@ -313,8 +318,7 @@ func (p *Pool) pinSlow() (*poolLocal, int) {
 // See go.dev/issue/67401.
 //
 // pool中的对象清理函数，会在gc开始时调用
-// 1、将
-// 上一轮gc留下的oldPools中的受害者对象池(victim)置空，即去除引用关系，才能让后面的gc回收掉
+// 1、将上一轮gc留下的oldPools中的受害者对象池(victim)置空，即去除引用关系，才能让后面的gc回收掉
 // 2、将本轮gc中的allPools中的本地缓存对象池(local)转换为受害者对象池(victim)，即不直接将本地缓存对象池清空回收，而是给一个缓冲时间，在下一轮gc回收掉
 // 3、更新allPools和oldPools集合
 //
