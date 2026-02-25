@@ -82,14 +82,18 @@ func (d *poolDequeue) pack(head, tail uint32) uint64 {
 // 添加对象到poolDequeue双端队列的队头，如果队列满了则返回false，只会被单个生产者调用(所属的p)
 func (d *poolDequeue) pushHead(val any) bool {
 	ptrs := d.headTail.Load()
+	//解析head和tail的值，高32位是head，低32位是tail
 	head, tail := d.unpack(ptrs)
+	//队列满了
 	if (tail+uint32(len(d.vals)))&(1<<dequeueBits-1) == head {
 		// Queue is full.
 		return false
 	}
+	//找到head对应的数组下标位置：head&uint32(len(d.vals)-1)等价于head%len(d.vals)
 	slot := &d.vals[head&uint32(len(d.vals)-1)]
 
 	// Check if the head slot has been released by popTail.
+	//检查是否和popTail冲突，操作同一个位置
 	typ := atomic.LoadPointer(&slot.typ)
 	if typ != nil {
 		// Another goroutine is still cleaning up the tail, so
@@ -105,6 +109,7 @@ func (d *poolDequeue) pushHead(val any) bool {
 
 	// Increment head. This passes ownership of slot to popTail
 	// and acts as a store barrier for writing the slot.
+	//head加1
 	d.headTail.Add(1 << dequeueBits)
 	return true
 }
@@ -127,10 +132,12 @@ func (d *poolDequeue) popHead() (any, bool) {
 		// Confirm tail and decrement head. We do this before
 		// reading the value to take back ownership of this
 		// slot.
+		//head减1，并更新到headTail中去
 		head--
 		ptrs2 := d.pack(head, tail)
 		if d.headTail.CompareAndSwap(ptrs, ptrs2) {
 			// We successfully took back slot.
+			//找到head对应的数组下标位置：head&uint32(len(d.vals)-1)等价于head%len(d.vals)
 			slot = &d.vals[head&uint32(len(d.vals)-1)]
 			break
 		}
@@ -164,9 +171,11 @@ func (d *poolDequeue) popTail() (any, bool) {
 		// Confirm head and tail (for our speculative check
 		// above) and increment tail. If this succeeds, then
 		// we own the slot at tail.
+		//tail加1，并更新到headTail中去
 		ptrs2 := d.pack(head, tail+1)
 		if d.headTail.CompareAndSwap(ptrs, ptrs2) {
 			// Success.
+			//找到tail对应的数组下标位置：tail&uint32(len(d.vals)-1)等价于tail%len(d.vals)
 			slot = &d.vals[tail&uint32(len(d.vals)-1)]
 			break
 		}
@@ -234,6 +243,7 @@ type poolChainElt struct {
 // 存储对象到指定p的localPool.shared链表的head节点的双端队列的队头去，如果当前head节点的双端队列满了，则新增一个节点，添加进去，并作为链表的新头节点
 func (c *poolChain) pushHead(val any) {
 	d := c.head
+	//如果head节点不存在，则创建节点作为head节点，并设置双端队列的长度为8
 	if d == nil {
 		// Initialize the chain.
 		const initSize = 8 // Must be a power of 2
