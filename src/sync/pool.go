@@ -68,12 +68,12 @@ type Pool struct {
 }
 
 // Local per-P Pool appendix.
-// P本地池底层数据的结构
+// P本地池底层数据的结构，每个p一个实例
 type poolLocalInternal struct {
 	//P私有的【1个】缓存对象，仅供P使用
 	private any // Can be used only by the respective P.
-	//可共享的【多个】缓存对象，可被其他P偷。
-	//是一个双向链表，P自己只能从head取和存，其他P只能从tail取
+	//可被其他p共享的【多个】缓存对象，可被其他P偷。
+	//是一个双向链表，P自己只能从head(这里是指最新节点，不是头节点)取和存，其他P只能从tail(这里是指最旧节点，不是尾节点)取
 	shared poolChain // Local P can pushHead/popHead; any P can popTail.
 }
 
@@ -141,10 +141,9 @@ func (p *Pool) Put(x any) {
 // If Get would otherwise return nil and p.New is non-nil, Get returns
 // the result of calling p.New.
 // 从Pool获取一个对象：流程是：
-// 1、将g固定到p
-// 2、获取p自己的localPool(如果没有则会初始化创建)，称为l
-// 3、先从l.private中获取对象(无锁，只有自己所属的p访问，无并发)
-// 4、如果l.private没有，则从l.shared中的head(最新节点)获取
+// 1、将g固定到p,并返回p自己的localPool(如果没有则会初始化创建)，称为l
+// 2、先从l.private(p私有的对象)中获取对象(无锁，只有自己所属的p访问，无并发)
+// 3、如果l.private没有，则从l.shared(p中可被其他p共享的对象链表)中的head(最新节点)获取
 func (p *Pool) Get() any {
 	//如果是以-race构建的，临时关闭race检测，自己来处理数据竞争
 	if race.Enabled {
@@ -163,14 +162,14 @@ func (p *Pool) Get() any {
 	//就会出现数据竞争，要保证正常运行地加锁才行
 	//2、返回p对应的localPool(如果没有localPool，则会为所有p创建localPool，因为pool实例中的所有p的localPool是一次性同时创建的)
 	l, pid := p.pin()
-	//从localPool.private取(无锁，因为无并发)
+	//从localPool.private取，p私有的，不共享(无锁，因为无并发)
 	x := l.private
 	l.private = nil
 	if x == nil {
 		// Try to pop the head of the local shard. We prefer
 		// the head over the tail for temporal locality of
 		// reuse.
-		//如果l.private没有，则从l.shared链表的最新节点->最旧节点方向遍历节点的双向队列的头部取对象
+		//如果l.private没有，则从l.shared共享对象链表的最新节点->最旧节点方向遍历节点的双向队列的头部取对象
 		x, _ = l.shared.popHead()
 		if x == nil {
 			//如果l.shared没有取到对象，则调用缓慢获取对象方法，获取的优先级是： 从其他p的shared链表偷->victim尝试获取(本p->其他p)
@@ -281,7 +280,7 @@ func (p *Pool) pinSlow() (*poolLocal, int) {
 	//对allPool加锁
 	allPoolsMu.Lock()
 	defer allPoolsMu.Unlock()
-	//将g固定到p中
+	//重新将g固定到p中
 	pid := runtime_procPin()
 	// poolCleanup won't be called while we are pinned.
 	s := p.localSize
