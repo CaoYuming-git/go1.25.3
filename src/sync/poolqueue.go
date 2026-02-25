@@ -109,7 +109,7 @@ func (d *poolDequeue) pushHead(val any) bool {
 // popHead removes and returns the element at the head of the queue.
 // It returns false if the queue is empty. It must only be called by a
 // single producer.
-// 从poolDequeue双向队列的头部取对象，这个操作只会被单个生产者调用(所属的p)
+// 从poolDequeue双端队列的队头取对象，这个操作只会被单个生产者调用(所属的p)
 func (d *poolDequeue) popHead() (any, bool) {
 	var slot *eface
 	//循环CAS获取一个对象
@@ -146,7 +146,7 @@ func (d *poolDequeue) popHead() (any, bool) {
 // popTail removes and returns the element at the tail of the queue.
 // It returns false if the queue is empty. It may be called by any
 // number of consumers.
-// 从poolDequeue双向队列的尾部取对象，这个操作会被多个生产者调用(其他p)
+// 从poolDequeue双端队列的队尾取对象，这个操作会被多个生产者调用(其他p)
 func (d *poolDequeue) popTail() (any, bool) {
 	var slot *eface
 	//循环CAS获取一个对象
@@ -195,21 +195,22 @@ func (d *poolDequeue) popTail() (any, bool) {
 // dequeue fills up, this allocates a new one and only ever pushes to
 // the latest dequeue. Pops happen from the other end of the list and
 // once a dequeue is exhausted, it gets removed from the list.
-// 链表
+// 双向链表，每个节点都有一个双端队列存储缓存的对象，链头节点表示最新的节点，链尾节点表示最旧的节点
+// 每个节点的next指向更新节点的方向(偏链头方向)，prev指向更旧节点的方向(偏链尾方向)，这个和普通的双向链表中的next,prev含义相反
 type poolChain struct {
 	// head is the poolDequeue to push to. This is only accessed
 	// by the producer, so doesn't need to be synchronized.
-	// 最新的节点，这里不是指头节点，它的前驱节点是稍微旧一点的节点，并不是nil，和双向链表有点区别。且只被生产者访问(所属的p)
+	// 链表头节点，表示最新的节点，它的前驱节点是更旧一点的节点，并不是nil，后驱节点是更新一点的节点，和双向链表有点区别。且只被生产者访问(所属的p)
 	head *poolChainElt
 
 	// tail is the poolDequeue to popTail from. This is accessed
 	// by consumers, so reads and writes must be atomic.
-	// 最旧的节点。只被消费者访问(就是其他P，不是这个链表所属的P，会在偷取的时候访问)
+	// 链表的尾节点，表示最旧的节点。只被消费者访问(就是其他P，不是这个链表所属的P，会在偷取的时候访问)
 	tail atomic.Pointer[poolChainElt]
 }
 
 type poolChainElt struct {
-	//底层数据存储的环形缓冲区
+	//底层数据存储的双端队列
 	poolDequeue
 
 	// next and prev link to the adjacent poolChainElts in this
@@ -222,7 +223,7 @@ type poolChainElt struct {
 	// prev is written atomically by the consumer and read
 	// atomically by the producer. It only transitions from
 	// non-nil to nil.
-	// next:更新的节点，prev:更旧的节点
+	// next:更新的节点(偏链头方向)，prev:更旧的节点(偏链尾方向) 和正常的双向链表的next/prev含义相反
 	next, prev atomic.Pointer[poolChainElt]
 }
 
@@ -237,18 +238,21 @@ func (c *poolChain) pushHead(val any) {
 		c.tail.Store(d)
 	}
 
+	//将对象添加到最新节点的双端队列中去
 	if d.pushHead(val) {
 		return
 	}
 
 	// The current dequeue is full. Allocate a new one of twice
 	// the size.
+	//添加节点失败，说明节点的队列满了，则创建一个新节点，大小为当前节点的两倍(最大不超过dequeueLimit)
 	newSize := len(d.vals) * 2
 	if newSize >= dequeueLimit {
 		// Can't make it any bigger.
 		newSize = dequeueLimit
 	}
 
+	//将新节点作为head(最新的节点)
 	d2 := &poolChainElt{}
 	d2.prev.Store(d)
 	d2.vals = make([]eface, newSize)

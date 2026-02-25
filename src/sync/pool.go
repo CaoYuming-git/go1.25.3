@@ -73,7 +73,9 @@ type poolLocalInternal struct {
 	//P私有的【1个】缓存对象，仅供P使用
 	private any // Can be used only by the respective P.
 	//可被其他p共享的【多个】缓存对象，可被其他P偷。
-	//是一个双向链表，P自己只能从head(这里是指最新节点，不是头节点)取和存，其他P只能从tail(这里是指最旧节点，不是尾节点)取
+	//是一个双向链表
+	//P自己从head(链头节点，最新节点)->tail(链尾节点，最旧节点)方向进行取，向head(链头节点，最新节点)存
+	//其他P从tail(链尾节点，最旧节点)->head(链头节点，最新节点)方向进行取
 	shared poolChain // Local P can pushHead/popHead; any P can popTail.
 }
 
@@ -108,26 +110,35 @@ func poolRaceAddr(x any) unsafe.Pointer {
 }
 
 // Put adds x to the pool.
+// 放回一个对象到pool中
 func (p *Pool) Put(x any) {
 	if x == nil {
 		return
 	}
+	//如果是以-race构建的，开启了数据竞争检测
 	if race.Enabled {
+		//以25%的概率丢弃对象(强化非确定性缓存的特性，即对象可能会被丢弃的特性),通过随机丢弃更早暴露错误用法
 		if runtime_randn(4) == 0 {
 			// Randomly drop x on floor.
 			return
 		}
+		//告诉数据竞争检测器，x被同步了，避免数据竞争检测器的误报。因为数据竞争检测器只能识别几种同步原语，比如：sync.Mutex、channel、atomic等等，而sync.Pool并不是同步原语，所以这里手动标记为同步
 		race.ReleaseMerge(poolRaceAddr(x))
+		//关闭竞争检测器
 		race.Disable()
 	}
+	//将g固定到p上，并返回该p的缓冲池poolLocal(如果没有则创建poolLocal返回)
 	l, _ := p.pin()
 	if l.private == nil {
+		//如果poolLocal.private空，则存到private中
 		l.private = x
 	} else {
+		//如果poolLocal.private有值了，则放到poolLocal.shared中去
 		l.shared.pushHead(x)
 	}
 	runtime_procUnpin()
 	if race.Enabled {
+		//重新打开竞争检测器
 		race.Enable()
 	}
 }
@@ -163,7 +174,7 @@ func (p *Pool) Get() any {
 		// Try to pop the head of the local shard. We prefer
 		// the head over the tail for temporal locality of
 		// reuse.
-		//如果l.private没有，则从l.shared共享对象链表的最新节点->最旧节点方向遍历节点的双向队列的头部取对象
+		//如果l.private没有，则从l.shared共享对象链表的最新节点->最旧节点方向遍历节点的双端队列的队头取对象
 		x, _ = l.shared.popHead()
 		if x == nil {
 			//如果l.shared没有取到对象，则调用缓慢获取对象方法，获取的优先级是： 从其他p的shared链表偷->victim尝试获取(本p->其他p)
