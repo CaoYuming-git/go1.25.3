@@ -264,12 +264,13 @@ func (c *poolChain) pushHead(val any) {
 	d2.pushHead(val)
 }
 
-// 从指定p的localPool.shared(p中可被其他p共享的对象链表)链表的head(最新节点)->tail(最旧节点)方向遍历节点获取一个对象
+// 从指定p的localPool.shared(p中可被其他p共享的对象链表)链表的head(最新节点)->tail(最旧节点)方向遍历节点，从节点中的双端队列的队头获取一个对象
 // 这个方法只会被生产者调用(就是所属的p自己)，但是不表示对节点的访问只有这一个方法，所以需要考虑数据竞争
 func (c *poolChain) popHead() (any, bool) {
 	d := c.head
-	//从最新的节点向旧节点遍历，从每个节点的头部取
+	//从最新的节点向最旧节点遍历节点
 	for d != nil {
+		//从每个节点的双端队列的队头取
 		if val, ok := d.popHead(); ok {
 			return val, ok
 		}
@@ -280,7 +281,7 @@ func (c *poolChain) popHead() (any, bool) {
 	return nil, false
 }
 
-// 从指定p的localPool.shared(p中可被其他p共享的对象链表)链表的tail(最旧节点)->head(最新节点)方向遍历节点获取一个对象，遍历的时候如果发现节点的对象为空(即没有取到对象)，则将节点从链表中剔除
+// 从指定p的localPool.shared(p中可被其他p共享的对象链表)链表的tail(最旧节点)->head(最新节点)方向遍历节点，从节点中的双端队列的队尾获取一个对象，遍历的时候如果发现节点的对象为空(即没有取到对象)，则将节点从链表中剔除
 // 会被消费者调用(就是除自己意外的其他p偷取)，会被多个消费者调用，需要考虑数据竞争
 func (c *poolChain) popTail() (any, bool) {
 	d := c.tail.Load()
@@ -288,7 +289,7 @@ func (c *poolChain) popTail() (any, bool) {
 		return nil, false
 	}
 
-	//从最旧的节点向新节点遍历，从每个节点的尾部取
+	//从最旧的节点向最新节点遍历节点
 	for {
 		// It's important that we load the next pointer
 		// *before* popping the tail. In general, d may be
@@ -299,7 +300,7 @@ func (c *poolChain) popTail() (any, bool) {
 		//获取更新的一个节点
 		d2 := d.next.Load()
 
-		//从节点的双向队列的尾部获取对象，获取到则直接返回
+		//从节点的双端队列的尾部获取对象，获取到则直接返回
 		if val, ok := d.popTail(); ok {
 			return val, ok
 		}
