@@ -123,6 +123,7 @@ func (d *poolDequeue) popHead() (any, bool) {
 	//循环CAS获取一个对象
 	for {
 		ptrs := d.headTail.Load()
+		//解析head和tail的值，高32位是head，低32位是tail
 		head, tail := d.unpack(ptrs)
 		if tail == head {
 			// Queue is empty.
@@ -149,6 +150,7 @@ func (d *poolDequeue) popHead() (any, bool) {
 	}
 	// Zero the slot. Unlike popTail, this isn't racing with
 	// pushHead, so we don't need to be careful here.
+	//将原head的值值为零值
 	*slot = eface{}
 	return val, true
 }
@@ -162,6 +164,7 @@ func (d *poolDequeue) popTail() (any, bool) {
 	//循环CAS获取一个对象
 	for {
 		ptrs := d.headTail.Load()
+		//解析head和tail的值，高32位是head，低32位是tail
 		head, tail := d.unpack(ptrs)
 		if tail == head {
 			// Queue is empty.
@@ -193,6 +196,7 @@ func (d *poolDequeue) popTail() (any, bool) {
 	//
 	// We write to val first and then publish that we're done with
 	// this slot by atomically writing to typ.
+	//原tail值置为零值(val值为nil，typ值为nil)
 	slot.val = nil
 	atomic.StorePointer(&slot.typ, nil)
 	// At this point pushHead owns the slot.
