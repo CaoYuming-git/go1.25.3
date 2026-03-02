@@ -17,16 +17,29 @@ import (
 // or the functions in compiletype.go to access this type instead.
 // (TODO: this admonition applies to every type in this package.
 // Put it in some shared location?)
+// Type是go在运行时对类型的描述信息，供运行阶段使用
 type Type struct {
-	Size_       uintptr
-	PtrBytes    uintptr // number of (prefix) bytes in the type that can contain pointers
-	Hash        uint32  // hash of type; avoids computation in hash tables
-	TFlag       TFlag   // extra type information flags
-	Align_      uint8   // alignment of variable with this type
-	FieldAlign_ uint8   // alignment of struct field with this type
-	Kind_       Kind    // enumeration for C
+	//表示次类型的数据需要占用多少字节的存储空间
+	Size_ uintptr
+	// 表示数据的前多少字节包含指针，用来在写屏障时优化范围大小，比如某个struct类型占用32byte，但是只有第一个字段时指针类型，这个值就是8，剩下24字节不需要写屏障。在GC进行位图标记时使用
+	PtrBytes uintptr // number of (prefix) bytes in the type that can contain pointers
+	//当前类型的hash值，会根据这个值构建map，加速类型查找比较
+	Hash uint32 // hash of type; avoids computation in hash tables
+	//额外的类型标识，4个bit：
+	//tflagUncommon: 表示类型元数据后面有个紧临的uncommontype结构，主要是在自定义类型定义方法集时使用
+	//tflagExtraStar：表示类型名称字符串前面有个前缀* 指针
+	//tflagNamed：表示类型有名称
+	//tflagRegularMemory
+	TFlag TFlag // extra type information flags
+	//表示当前类型变量的对齐边界
+	Align_ uint8 // alignment of variable with this type
+	//表示当前类型的struct字段的对齐边界
+	FieldAlign_ uint8 // alignment of struct field with this type
+	//表示当前类型所属的分类，当前go的reflect包中定义了26中分类
+	Kind_ Kind // enumeration for C
 	// function for comparing objects of this type
 	// (ptr to object A, ptr to object B) -> ==?
+	//比较两个当前类型的变量是否相等
 	Equal func(unsafe.Pointer, unsafe.Pointer) bool
 	// GCData stores the GC type data for the garbage collector.
 	// Normally, GCData points to a bitmask that describes the
@@ -39,8 +52,11 @@ type Type struct {
 	// Note: multiple types may have the same value of GCData,
 	// including when TFlagGCMaskOnDemand is set. The types will, of course,
 	// have the same pointer layout (but not necessarily the same size).
-	GCData    *byte
-	Str       NameOff // string form
+	//和垃圾回收相关，GC扫描和写屏障用来追踪指针
+	GCData *byte
+	//偏移，找到当前类型的名称等文本信息
+	Str NameOff // string form
+	//指向此类型的指针类型
 	PtrToThis TypeOff // type for pointer to this type, may be zero
 }
 
