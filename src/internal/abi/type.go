@@ -18,6 +18,7 @@ import (
 // (TODO: this admonition applies to every type in this package.
 // Put it in some shared location?)
 // Type是go在运行时对类型的描述信息，所有类型的描述信息的头部都是Type,运行阶段先读取Type再根据Kind字段来读取完整的类型信息
+// 注意：类型元数据Type是接口中用来描述各种动态类型的结构(供运行时使用，比如实现反射、类型断言等等功能)，并不是各个类型的值的实际内存结构
 type Type struct {
 	//表示次类型的数据需要占用多少字节的存储空间
 	Size_ uintptr
