@@ -17,7 +17,7 @@ import (
 // or the functions in compiletype.go to access this type instead.
 // (TODO: this admonition applies to every type in this package.
 // Put it in some shared location?)
-// Type是go在运行时对类型的描述信息，供运行阶段使用
+// Type是go在运行时对类型的描述信息，所有类型的描述信息的头部都是Type,运行阶段先读取Type再根据Kind字段来读取完整的类型信息
 type Type struct {
 	//表示次类型的数据需要占用多少字节的存储空间
 	Size_ uintptr
@@ -35,7 +35,7 @@ type Type struct {
 	Align_ uint8 // alignment of variable with this type
 	//表示当前类型的struct字段的对齐边界
 	FieldAlign_ uint8 // alignment of struct field with this type
-	//表示当前类型所属的分类，当前go的reflect包中定义了26中分类
+	//表示的具体类型，比如slice、map等等，然后按照sliceType、mapType来解析完整的类型结构信息
 	Kind_ Kind // enumeration for C
 	// function for comparing objects of this type
 	// (ptr to object A, ptr to object B) -> ==?
