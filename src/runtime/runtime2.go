@@ -175,16 +175,19 @@ type funcval struct {
 	// variable-size, fn-specific data here
 }
 
+// iface就是interface的简写，非空接口
 type iface struct {
 	tab  *itab
 	data unsafe.Pointer
 }
 
+// eface就是empty interface的简写，空接口
 type eface struct {
 	_type *_type
 	data  unsafe.Pointer
 }
 
+// 将any(interface{}空接口)类型转换为eface类型，interface空接口类型的内存结构本身就是eface，但是go语言层面上无法通过interface来访问eface中的属性，所以需要通过类型转换来访问其中的内部属性
 func efaceOf(ep *any) *eface {
 	return (*eface)(unsafe.Pointer(ep))
 }
