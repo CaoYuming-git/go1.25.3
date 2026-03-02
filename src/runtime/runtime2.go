@@ -177,14 +177,14 @@ type funcval struct {
 
 // iface就是interface的简写，非空接口
 type iface struct {
-	tab  *itab
-	data unsafe.Pointer
+	tab  *itab          //包含了_type和方法地址数组
+	data unsafe.Pointer // 含义上和c的void * 类似，表明一个指针，可以指向任意类型的地址
 }
 
 // eface就是empty interface的简写，空接口
 type eface struct {
-	_type *_type
-	data  unsafe.Pointer
+	_type *_type         //描述data的类型元数据
+	data  unsafe.Pointer // 含义上和c的void * 类似，表明一个指针，可以指向任意类型的地址
 }
 
 // 将any(interface{}空接口)类型转换为eface类型，interface空接口类型的内存结构本身就是eface，但是go语言层面上无法通过interface来访问eface中的属性，所以需要通过类型转换来访问其中的内部属性
