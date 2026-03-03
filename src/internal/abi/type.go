@@ -237,9 +237,9 @@ func (t *Type) GcSlice(begin, end uintptr) []byte {
 // Method on non-interface type
 // Method 方法描述信息
 type Method struct {
-	//表示方法名的偏移量
+	//指向方法名的偏移量
 	Name NameOff // name of method
-	//表示方法的类型元数据的偏移量
+	//指向方法的类型元数据的偏移量
 	Mtyp TypeOff // method type (without receiver)
 	//供接口调用的方法地址
 	Ifn TextOff // fn used in interface call (one-word receiver)
