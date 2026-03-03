@@ -27,7 +27,7 @@ type Type struct {
 	//当前类型的hash值，会根据这个值构建map，加速类型查找比较
 	Hash uint32 // hash of type; avoids computation in hash tables
 	//额外的类型标识，4个bit：
-	//tflagUncommon: 表示类型元数据后面有个紧临的uncommontype结构，主要是在自定义类型定义方法集时使用
+	//tflagUncommon: 表示为自定义类型，表示类型元数据后面有个紧临的uncommontype结构，主要是在自定义类型定义方法集时使用
 	//tflagExtraStar：表示类型名称字符串前面有个前缀* 指针
 	//tflagNamed：表示类型有名称
 	//tflagRegularMemory
@@ -36,7 +36,8 @@ type Type struct {
 	Align_ uint8 // alignment of variable with this type
 	//表示当前类型的struct字段的对齐边界
 	FieldAlign_ uint8 // alignment of struct field with this type
-	//表示的具体类型，比如slice、map等等，然后按照sliceType、mapType来解析完整的类型结构信息
+	//表示的底层类型，比如slice、map等等，然后按照sliceType、mapType来解析完整的类型结构信息
+	//如果是自定义类型，自定义类型都是基于基本类型来创建的，这里的Kind就是表示底层的基本类型
 	Kind_ Kind // enumeration for C
 	// function for comparing objects of this type
 	// (ptr to object A, ptr to object B) -> ==?
