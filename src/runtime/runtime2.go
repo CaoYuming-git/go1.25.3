@@ -183,7 +183,7 @@ type iface struct {
 
 // eface就是empty interface的简写，空接口，可以理解为是一个void *的增强版本，加上了类型信息
 type eface struct {
-	_type *_type         //描述data的类型元数据
+	_type *_type         //描述data类型的类型元数据
 	data  unsafe.Pointer // 含义上和c的void * 类似，表明一个指针，可以指向任意类型的地址
 }
 

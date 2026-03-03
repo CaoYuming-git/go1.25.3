@@ -253,7 +253,7 @@ type Method struct {
 // to describe a non-defined type with no methods.
 // UncommonType 自定义类型的方法集描述信息
 type UncommonType struct {
-	//定义该类型的包名称
+	//定义该类型的包的导入路径
 	PkgPath NameOff // import path; empty for built-in types like int, string
 	//类型共有多少个方法
 	Mcount uint16 // number of methods
