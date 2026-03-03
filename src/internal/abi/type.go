@@ -235,23 +235,33 @@ func (t *Type) GcSlice(begin, end uintptr) []byte {
 }
 
 // Method on non-interface type
+// Method 方法描述信息
 type Method struct {
+	//表示方法名的偏移量
 	Name NameOff // name of method
+	//表示方法的类型元数据的偏移量
 	Mtyp TypeOff // method type (without receiver)
-	Ifn  TextOff // fn used in interface call (one-word receiver)
-	Tfn  TextOff // fn used for normal method call
+	//供接口调用的方法地址
+	Ifn TextOff // fn used in interface call (one-word receiver)
+	//正常的方法地址
+	Tfn TextOff // fn used for normal method call
 }
 
 // UncommonType is present only for defined types or types with methods
 // (if T is a defined type, the uncommonTypes for T and *T have methods).
 // Using a pointer to this struct reduces the overall size required
 // to describe a non-defined type with no methods.
+// UncommonType 自定义类型的方法集描述信息
 type UncommonType struct {
+	//定义该类型的包名称
 	PkgPath NameOff // import path; empty for built-in types like int, string
-	Mcount  uint16  // number of methods
-	Xcount  uint16  // number of exported methods
-	Moff    uint32  // offset from this uncommontype to [mcount]Method
-	_       uint32  // unused
+	//类型共有多少个方法
+	Mcount uint16 // number of methods
+	//可导出的方法个数
+	Xcount uint16 // number of exported methods
+	//从UncommonType到数组[mcount]Method的字节偏移，可以得到方法数组的起始地址
+	Moff uint32 // offset from this uncommontype to [mcount]Method
+	_    uint32 // unused
 }
 
 func (t *UncommonType) Methods() []Method {
