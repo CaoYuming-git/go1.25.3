@@ -58,7 +58,7 @@ type Type struct {
 	GCData *byte
 	//偏移，找到当前类型的名称等文本信息
 	Str NameOff // string form
-	//指向此类型的指针类型
+	//指向此类型的指针类型的类型元数据的偏移量
 	PtrToThis TypeOff // type for pointer to this type, may be zero
 }
 
@@ -346,6 +346,7 @@ func (t *Type) ChanDir() ChanDir {
 }
 
 // Uncommon returns a pointer to T's "uncommon" data if there is any, otherwise nil
+// 返回UncommonType的地址
 func (t *Type) Uncommon() *UncommonType {
 	if t.TFlag&TFlagUncommon == 0 {
 		return nil
