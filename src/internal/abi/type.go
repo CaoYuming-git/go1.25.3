@@ -264,6 +264,7 @@ type UncommonType struct {
 	_    uint32 // unused
 }
 
+// Methods 返回[mcount]Method数组的地址
 func (t *UncommonType) Methods() []Method {
 	if t.Mcount == 0 {
 		return nil
