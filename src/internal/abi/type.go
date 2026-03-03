@@ -259,7 +259,7 @@ type UncommonType struct {
 	Mcount uint16 // number of methods
 	//可导出的方法个数
 	Xcount uint16 // number of exported methods
-	//从UncommonType到数组[mcount]Method的字节偏移，可以得到方法数组的起始地址
+	//从UncommonType到紧邻的数组[mcount]Method的字节偏移，可以得到方法数组的起始地址
 	Moff uint32 // offset from this uncommontype to [mcount]Method
 	_    uint32 // unused
 }
