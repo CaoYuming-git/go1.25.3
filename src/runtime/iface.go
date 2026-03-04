@@ -401,10 +401,10 @@ func convT32(val uint32) (x unsafe.Pointer) {
 //go:linkname convT64
 func convT64(val uint64) (x unsafe.Pointer) {
 	if val < uint64(len(staticuint64s)) {
-		//如果值小于256则直接用静态区中的地址表示副本
+		//如果值小于256则直接用静态区中的地址表示值，效果类似于创建了一个副本，但本质并没有分配一个新内存作为副本
 		x = unsafe.Pointer(&staticuint64s[val])
 	} else {
-		//去堆中创建一个副本
+		//去堆中申请内存创建一个副本
 		x = mallocgc(8, uint64Type, false)
 		*(*uint64)(x) = val
 	}
