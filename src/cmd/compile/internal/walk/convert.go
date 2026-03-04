@@ -136,8 +136,8 @@ func dataWord(conv *ir.ConvExpr, init *ir.Nodes) ir.Node {
 	// If it's a pointer, it is its own representation.
 	// 如果是指针(非值类型)，则返回它自己，不需要创建副本
 	// 注意这里的指针，不仅仅是指 *T和unsafe.Pointer,还包括map、chan、func等类型，因为：
-	//	map类型变量的值在runtime层面(不是语法层面)表示上是一个指向内部结构hmap的指针。比如创建一个map变量调用makemap函数时实际返回的就是一个*hamp类型，是一个指针
-	//  chan类型变量的值在runtime层面(不是语法层面)表示上是一个指向内部结构hchan的指针。比如创建一个chan变量调用makechan函数时实际返回的就是一个*hchan类型，是一个指针
+	//	map类型变量的值在runtime层面(不是语法层面)表示上是一个指向内部结构hmap的指针。比如创建一个map变量调用makemap函数时实际返回的就是一个*hamp类型，本质是一个指针
+	//  chan类型变量的值在runtime层面(不是语法层面)表示上是一个指向内部结构hchan的指针。比如创建一个chan变量调用makechan函数时实际返回的就是一个*hchan类型，本质是一个指针
 	//  func类型变量的值在runtime层面(不是语法层面)表示上是一个指向内部结构funcval的指针。创建一个func由编译器直接把一个符合 funcval 内存布局的对象构造出来（静态或动态），然后把它的地址当作 func 值
 	//注意：这里不包括slice和array，他们在runtime层面表示上并不是一个指针。makeslice返回的并不是slice的指针
 	if types.IsDirectIface(fromType) {
@@ -252,6 +252,7 @@ func dataWord(conv *ir.ConvExpr, init *ir.Nodes) ir.Node {
 		}
 		args = []ir.Node{arg}
 	}
+	//调用 convTxx，比如convT64、convTString等等函数，去堆中创建副本
 	call := ir.NewCallExpr(base.Pos, ir.OCALL, fn, nil)
 	call.Args = args
 	return safeExpr(walkExpr(typecheck.Expr(call), init), init)
