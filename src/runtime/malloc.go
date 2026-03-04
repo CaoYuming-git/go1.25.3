@@ -1010,6 +1010,8 @@ const doubleCheckMalloc = false
 // Do not remove or change the type signature.
 // See go.dev/issue/67401.
 //
+// 从堆中创建/分配一个大小为size字节的对象，小对象从每个P的缓存(也是堆内存)中分配，大对象从堆中分配
+//
 //go:linkname mallocgc
 func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 	if doubleCheckMalloc {
@@ -1052,6 +1054,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 	var x unsafe.Pointer
 	var elemsize uintptr
 	if size <= maxSmallSize-gc.MallocHeaderSize {
+		//小对象从P的缓存中分配
 		if typ == nil || !typ.Pointers() {
 			if size < maxTinySize {
 				x, elemsize = mallocgcTiny(size, typ)
@@ -1069,6 +1072,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 			}
 		}
 	} else {
+		//大对象从堆中分配
 		x, elemsize = mallocgcLarge(size, typ, needzero)
 	}
 

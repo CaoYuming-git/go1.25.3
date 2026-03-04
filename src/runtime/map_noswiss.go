@@ -321,6 +321,8 @@ func makemap_small() *hmap {
 // Do not remove or change the type signature.
 // See go.dev/issue/67401.
 //
+// 创建map变量，实际返回的是一个指向hmap的指针，map的值实际是一个指针
+//
 //go:linkname makemap
 func makemap(t *maptype, hint int, h *hmap) *hmap {
 	mem, overflow := math.MulUintptr(uintptr(hint), t.Bucket.Size_)

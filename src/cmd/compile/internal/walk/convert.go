@@ -126,11 +126,20 @@ func walkConvInterface(n *ir.ConvExpr, init *ir.Nodes) ir.Node {
 
 // Returns the data word (the second word) used to represent conv.X in
 // an interface.
+// 返回接口(eface/iface)的data字段的值
+// 如果是值类型，则常见一个副本赋值，将地址赋值给data指针(会判断逃逸分析的结果是否需要在堆中还是栈中创建副本)：case conv.Esc() 和 typecheck.LookupRuntime这段带啊吗
+// 如果不是值类型，是本质是指针类型(*T、unsafe.Pointer、map、chan、func等类型)，则直接赋值给data指针
 func dataWord(conv *ir.ConvExpr, init *ir.Nodes) ir.Node {
 	pos, n := conv.Pos(), conv.X
 	fromType := n.Type()
 
 	// If it's a pointer, it is its own representation.
+	// 如果是指针(非值类型)，则返回它自己，不需要创建副本
+	// 注意这里的指针，不仅仅是指 *T和unsafe.Pointer,还包括map、chan、func等类型，因为：
+	//	map类型变量的值在runtime层面(不是语法层面)表示上是一个指向内部结构hmap的指针。比如创建一个map变量调用makemap函数时实际返回的就是一个*hamp类型，是一个指针
+	//  chan类型变量的值在runtime层面(不是语法层面)表示上是一个指向内部结构hchan的指针。比如创建一个chan变量调用makechan函数时实际返回的就是一个*hchan类型，是一个指针
+	//  func类型变量的值在runtime层面(不是语法层面)表示上是一个指向内部结构funcval的指针。创建一个func由编译器直接把一个符合 funcval 内存布局的对象构造出来（静态或动态），然后把它的地址当作 func 值
+	//注意：这里不包括slice和array，他们在runtime层面表示上并不是一个指针。makeslice返回的并不是slice的指针
 	if types.IsDirectIface(fromType) {
 		return n
 	}
@@ -152,6 +161,7 @@ func dataWord(conv *ir.ConvExpr, init *ir.Nodes) ir.Node {
 
 	// Try a bunch of cases to avoid an allocation.
 	var value ir.Node
+	//进行一系列判断看是否需要进行堆分配
 	switch {
 	case fromType.Size() == 0:
 		// n is zero-sized. Use zerobase.
@@ -185,6 +195,7 @@ func dataWord(conv *ir.ConvExpr, init *ir.Nodes) ir.Node {
 		diagnose("using global for interface value", n)
 		value = n
 	case conv.Esc() == ir.EscNone && fromType.Size() <= 1024:
+		// 逃逸分析结果是不需要逃逸，则在栈中创建临时变量value，绕开下面的convTxxx调用
 		// n does not escape. Use a stack temporary initialized to n.
 		diagnose("using stack temporary for interface value", n)
 		value = typecheck.TempAt(base.Pos, ir.CurFunc, fromType)
@@ -196,6 +207,7 @@ func dataWord(conv *ir.ConvExpr, init *ir.Nodes) ir.Node {
 	}
 
 	// Time to do an allocation. We'll call into the runtime for that.
+	//如果上面的特例没有命中，则逃逸，需要在堆中创建变量
 	fnname, argType, needsaddr := dataWordFuncName(fromType)
 	var fn *ir.Name
 
@@ -210,6 +222,7 @@ func dataWord(conv *ir.ConvExpr, init *ir.Nodes) ir.Node {
 		if !ir.IsAddressable(n) {
 			n = copyExpr(n, fromType, init)
 		}
+		// 接口装箱，需要调用convTxxx函数转换类型(可能在堆中创建副本，进行类型转换)，这里获取convTxx的具体函数
 		fn = typecheck.LookupRuntime(fnname, fromType)
 		args = []ir.Node{reflectdata.ConvIfaceSrcRType(base.Pos, conv), typecheck.NodAddr(n)}
 	} else {

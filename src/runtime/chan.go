@@ -72,6 +72,7 @@ func makechan64(t *chantype, size int64) *hchan {
 	return makechan(t, int(size))
 }
 
+// 创建chan变量，实际返回的是一个指向hchan的指针，chan的值实际是一个指针
 func makechan(t *chantype, size int) *hchan {
 	elem := t.Elem
 

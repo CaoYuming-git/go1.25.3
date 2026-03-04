@@ -112,7 +112,7 @@ func makeslice(et *_type, len, cap int) unsafe.Pointer {
 		}
 		panicmakeslicecap()
 	}
-
+	// 这里仅仅是返回的是底层数组的指针，不是完整的slice结构的指针
 	return mallocgc(mem, et, true)
 }
 
