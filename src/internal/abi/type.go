@@ -239,7 +239,7 @@ func (t *Type) GcSlice(begin, end uintptr) []byte {
 type Method struct {
 	//指向方法名的偏移量
 	Name NameOff // name of method
-	//指向方法的类型元数据的偏移量
+	//指向方法的类型元数据的偏移量，方法的类型元数据(FuncType)中包含了参数和返回值信息，但是和Method在内存上并不是紧邻的
 	Mtyp TypeOff // method type (without receiver)
 	//供接口调用的方法地址
 	Ifn TextOff // fn used in interface call (one-word receiver)
