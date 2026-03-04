@@ -14,8 +14,9 @@ import "unsafe"
 type ITab struct {
 	Inter *InterfaceType
 	Type  *Type
-	Hash  uint32     // copy of Type.Hash. Used for type switches.
-	Fun   [1]uintptr // variable sized. fun[0]==0 means Type does not implement Inter.
+	Hash  uint32 // copy of Type.Hash. Used for type switches.
+	//接口的方法表数组，每个元素是指向方法地址的指针，数组大小是动态的
+	Fun [1]uintptr // variable sized. fun[0]==0 means Type does not implement Inter.
 }
 
 // EmptyInterface describes the layout of a "interface{}" or a "any."
