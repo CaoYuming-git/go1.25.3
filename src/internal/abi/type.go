@@ -524,9 +524,13 @@ type SliceType struct {
 //		uncommonType
 //		[2]*rtype    // [0] is in, [1] is out
 //	}
+//
+// 方法的类型元数据
 type FuncType struct {
 	Type
-	InCount  uint16
+	//函数的参数数量，在FuncType后面紧邻着Type数组，每个元素都是参数的类型元数据
+	InCount uint16
+	//函数的返回值数量，在FuncType后面紧邻着Type数组，每个元素都是返回参数的类型元数据
 	OutCount uint16 // top bit is set if last input parameter is ...
 }
 
