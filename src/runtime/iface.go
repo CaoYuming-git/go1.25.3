@@ -396,11 +396,15 @@ func convT32(val uint32) (x unsafe.Pointer) {
 // Do not remove or change the type signature.
 // See go.dev/issue/67401.
 //
+// 去静态区或者堆中创建一个int64的副本
+//
 //go:linkname convT64
 func convT64(val uint64) (x unsafe.Pointer) {
 	if val < uint64(len(staticuint64s)) {
+		//如果值小于256则直接用静态区中的地址表示副本
 		x = unsafe.Pointer(&staticuint64s[val])
 	} else {
+		//去堆中创建一个副本
 		x = mallocgc(8, uint64Type, false)
 		*(*uint64)(x) = val
 	}
