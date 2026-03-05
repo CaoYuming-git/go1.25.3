@@ -19,8 +19,9 @@ type ITab struct {
 	Type *Type
 	// Type的哈希值
 	Hash uint32 // copy of Type.Hash. Used for type switches.
-	//接口的方法表数组，这个可以在动态派发的时候快速找到方法地址，而不用去Type中去找了，
-	//每个元素是指向方法地址的指针，方法数组大小实际是动态的，不只是1，todo会根据Inter中的方法数?，在Fun[0]后面加上其余的的方法
+	// 具体类型实现的接口的方法的方法地址表，这个可以在动态派发的时候快速找到调用的方法地址，而不用去Type中去找了
+	// 这个数组的大小实际是动态的，会在Fun紧跟着所有实现的方法集地址
+	// Fun[0]如果为0，表示具体类型没有实现接口
 	Fun [1]uintptr // variable sized. fun[0]==0 means Type does not implement Inter.
 }
 
