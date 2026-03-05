@@ -11,7 +11,7 @@ import "unsafe"
 // is implementing (Inter), and some ancillary information.
 //
 // allocated in non-garbage-collected memory
-// 非空接口的底层结构
+// 非空接口的具体类型实现的接口方法表
 type ITab struct {
 	// 接口类型的类型元数据，描述接口本身的
 	Inter *InterfaceType

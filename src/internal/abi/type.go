@@ -295,7 +295,7 @@ func addChecked(p unsafe.Pointer, x uintptr, whySafe string) unsafe.Pointer {
 type Imethod struct {
 	// 方法名称
 	Name NameOff // name of method
-	// 方法的类型元数据
+	// 到方法的类型元数据FuncType的偏移
 	Typ TypeOff // .(*FuncType) underneath
 }
 
