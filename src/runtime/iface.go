@@ -15,15 +15,20 @@ import (
 const itabInitSize = 512
 
 var (
-	itabLock      mutex                               // lock for accessing itab table
+	itabLock mutex // lock for accessing itab table
+	// iTab全局缓存
 	itabTable     = &itabTableInit                    // pointer to current table
 	itabTableInit = itabTableType{size: itabInitSize} // starter table
 )
 
 // Note: change the formula in the mallocgc call in itabAdd if you change these fields.
+// iTab全局缓存，类型描述信息
 type itabTableType struct {
-	size    uintptr             // length of entries array. Always a power of 2.
-	count   uintptr             // current number of filled entries.
+	// entries数组长度
+	size uintptr // length of entries array. Always a power of 2.
+	// 已缓存iTab数量
+	count uintptr // current number of filled entries.
+	// 缓存空间，注意这个大小并不是固定的itabInitSize，可以无限增长的，这个itabInitSize只是一种C语言常用的手法
 	entries [itabInitSize]*itab // really [size] large
 }
 
@@ -41,8 +46,8 @@ func itabHashFunc(inter *interfacetype, typ *_type) uintptr {
 // See go.dev/issue/67401.
 //
 // 生成一个iTab：
-// (1、根据接口类型+具体类型，先从缓存中检查，如果有则直接返回
-// (2、创建一个iTab，并初始化(从具体类型的方法集中找到接口定义的需要实现的方法，填充到iTab的Fun数组中去)
+// (1、根据接口类型+具体类型，先从iTab缓存中检查，如果有则直接返回
+// (2、创建一个iTab，并初始化(从具体类型的方法集中找到接口定义的需要实现的方法，填充到iTab的Fun数组中去)，加入到iTab缓存
 // 参数：
 // (1、inter：接口的类型元数据
 // (2、type：具体类型的类型元数据
@@ -52,11 +57,13 @@ func itabHashFunc(inter *interfacetype, typ *_type) uintptr {
 //
 //go:linkname getitab
 func getitab(inter *interfacetype, typ *_type, canfail bool) *itab {
+	// 如果接口没有定义方法，则报错，因为就是空接口了，不需要生成iTab
 	if len(inter.Methods) == 0 {
 		throw("internal error - misuse of itab")
 	}
 
 	// easy case
+	// 如果具体类型不是自定义类型则报错，因为只有自定义类型才能有方法集，是不可能实现接口的方法集的
 	if typ.TFlag&abi.TFlagUncommon == 0 {
 		if canfail {
 			return nil
@@ -64,19 +71,21 @@ func getitab(inter *interfacetype, typ *_type, canfail bool) *itab {
 		name := toRType(&inter.Type).nameOff(inter.Methods[0].Name)
 		panic(&TypeAssertionError{nil, typ, &inter.Type, name.Name()})
 	}
-
+	// 创建iTab类型空指针
 	var m *itab
 
 	// First, look in the existing table to see if we can find the itab we need.
 	// This is by far the most common case, so do it without locks.
 	// Use atomic to ensure we see any previous writes done by the thread
 	// that updates the itabTable field (with atomic.Storep in itabAdd).
+	// 先去缓存表itabTable中找是否有iTab，如果有，则直接将m指向缓存的iTab返回
 	t := (*itabTableType)(atomic.Loadp(unsafe.Pointer(&itabTable)))
 	if m = t.find(inter, typ); m != nil {
 		goto finish
 	}
 
 	// Not found.  Grab the lock and try again.
+	// 获取锁再去最新的缓存表itabTable中找一遍，因为可能在上面的atomic.Loadp之后~find()前这段时间更新了缓存，导致没查到，但是最新的缓存itabTable中有iTab了
 	lock(&itabLock)
 	if m = itabTable.find(inter, typ); m != nil {
 		unlock(&itabLock)
@@ -84,6 +93,7 @@ func getitab(inter *interfacetype, typ *_type, canfail bool) *itab {
 	}
 
 	// Entry doesn't exist yet. Make a new entry & add it.
+	// 缓存itabTable中没有，则根据接口定义的方法集数量来确定内存大小，创建一个新iTab
 	m = (*itab)(persistentalloc(unsafe.Sizeof(itab{})+uintptr(len(inter.Methods)-1)*goarch.PtrSize, 0, &memstats.other_sys))
 	m.Inter = inter
 	m.Type = typ
@@ -93,8 +103,9 @@ func getitab(inter *interfacetype, typ *_type, canfail bool) *itab {
 	// and thus the hash is irrelevant.
 	// Note: m.Hash is _not_ the hash used for the runtime itabTable hash table.
 	m.Hash = 0
-	// 初始化iTab，去具体类型中的方法集找到接口中定义的方法集，把具体类型实现的方法地址填入到iTab中的Fun方法集数组中去，供后面调用直接能找到函数地址
+	// 初始化iTab，去具体类型的类型元数据中的方法集找到接口中定义的方法集，把具体类型实现的方法地址填入到iTab中的Fun方法集数组中去，供后面调用直接能找到函数地址
 	itabInit(m, true)
+	// 将m加入到缓存表itabTable
 	itabAdd(m)
 	unlock(&itabLock)
 finish:
@@ -140,6 +151,7 @@ func (t *itabTableType) find(inter *interfacetype, typ *_type) *itab {
 
 // itabAdd adds the given itab to the itab hash table.
 // itabLock must be held.
+// 将iTab加入iTab缓存表itabTable
 func itabAdd(m *itab) {
 	// Bugs can lead to calling this while mallocing is set,
 	// typically because this is called while panicking.
@@ -150,6 +162,7 @@ func itabAdd(m *itab) {
 	}
 
 	t := itabTable
+	// 如果缓存表itabTable的容量超出了3/4，则扩容为原来2倍
 	if t.count >= 3*(t.size/4) { // 75% load factor
 		// Grow hash table.
 		// t2 = new(itabTableType) + some additional entries

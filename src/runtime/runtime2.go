@@ -177,7 +177,7 @@ type funcval struct {
 
 // iface就是interface的简写，非空接口
 type iface struct {
-	tab  *itab          //包含了_type和方法地址数组
+	tab  *itab          // 具体类型实现某个接口的方法表：包含了接口类型的类型元数据、具体类型的类型元数据、具体类型实现接口的方法地址表，接口动态派发就是从这里找需要调用的函数的入口地址的
 	data unsafe.Pointer // 含义上和c的void * 类似，表明一个指针，可以指向任意类型的地址
 }
 
