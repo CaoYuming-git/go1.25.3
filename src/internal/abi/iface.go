@@ -13,9 +13,12 @@ import "unsafe"
 // allocated in non-garbage-collected memory
 // 非空接口的底层结构
 type ITab struct {
+	// 接口类型的类型元数据，描述接口本身的
 	Inter *InterfaceType
-	Type  *Type
-	Hash  uint32 // copy of Type.Hash. Used for type switches.
+	// 接口指向的实现类型的类型的类型元数据
+	Type *Type
+	// Type的哈希值
+	Hash uint32 // copy of Type.Hash. Used for type switches.
 	//接口的方法表数组，这个可以在动态派发的时候快速找到方法地址，而不用去Type中去找了，
 	//每个元素是指向方法地址的指针，方法数组大小实际是动态的，不只是1，todo会根据Inter中的方法数?，在Fun[0]后面加上其余的的方法
 	Fun [1]uintptr // variable sized. fun[0]==0 means Type does not implement Inter.

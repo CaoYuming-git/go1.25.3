@@ -291,9 +291,12 @@ func addChecked(p unsafe.Pointer, x uintptr, whySafe string) unsafe.Pointer {
 }
 
 // Imethod represents a method on an interface type
+// 接口声明的方法的描述信息
 type Imethod struct {
+	// 方法名称
 	Name NameOff // name of method
-	Typ  TypeOff // .(*FuncType) underneath
+	// 方法的类型元数据
+	Typ TypeOff // .(*FuncType) underneath
 }
 
 // ArrayType represents a fixed array type.
@@ -476,9 +479,13 @@ func (t *Type) Align() int { return int(t.Align_) }
 
 func (t *Type) FieldAlign() int { return int(t.FieldAlign_) }
 
+// InterfaceType 接口类型的类型元数据
 type InterfaceType struct {
+	//公共的类型描述信息
 	Type
-	PkgPath Name      // import path
+	// 接口被定义的包
+	PkgPath Name // import path
+	// 接口声明的方法列表
 	Methods []Imethod // sorted by hash
 }
 

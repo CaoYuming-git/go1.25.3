@@ -40,6 +40,16 @@ func itabHashFunc(inter *interfacetype, typ *_type) uintptr {
 // Do not remove or change the type signature.
 // See go.dev/issue/67401.
 //
+// 生成一个iTab：
+// (1、根据接口类型+具体类型，先从缓存中检查，如果有则直接返回
+// (2、创建一个iTab，并初始化(从具体类型的方法集中找到接口定义的需要实现的方法，填充到iTab的Fun数组中去)
+// 参数：
+// (1、inter：接口的类型元数据
+// (2、type：具体类型的类型元数据
+// (3、canfail：是否允许失败，true-如果失败返回nil false-如果失败造成panic，对应着两种风格的类型断言：
+// r,ok := a.(io.Reader) 对应着canfail为true，如果失败ok为false
+// r := a.(io.Reader) 对应着canfail为false，如果失败会造成panic
+//
 //go:linkname getitab
 func getitab(inter *interfacetype, typ *_type, canfail bool) *itab {
 	if len(inter.Methods) == 0 {
@@ -83,6 +93,7 @@ func getitab(inter *interfacetype, typ *_type, canfail bool) *itab {
 	// and thus the hash is irrelevant.
 	// Note: m.Hash is _not_ the hash used for the runtime itabTable hash table.
 	m.Hash = 0
+	// 初始化iTab，去具体类型中的方法集找到接口中定义的方法集，把具体类型实现的方法地址填入到iTab中的Fun方法集数组中去，供后面调用直接能找到函数地址
 	itabInit(m, true)
 	itabAdd(m)
 	unlock(&itabLock)
@@ -201,6 +212,7 @@ func (t *itabTableType) add(m *itab) {
 // If !firstTime, itabInit will not write anything to m.Fun (see issue 65962).
 // It is ok to call this multiple times on the same m, even concurrently
 // (although it will only be called once with firstTime==true).
+// 初始化itab,去具体实现的类型的方法集中找到接口itab中定义的方法集，填充到itab的Fun数组中去
 func itabInit(m *itab, firstTime bool) string {
 	inter := m.Inter
 	typ := m.Type
