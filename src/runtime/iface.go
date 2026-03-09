@@ -105,6 +105,7 @@ func getitab(inter *interfacetype, typ *_type, canfail bool) *itab {
 	// Note: m.Hash is _not_ the hash used for the runtime itabTable hash table.
 	m.Hash = 0
 	// 初始化iTab，去具体类型的类型元数据中的方法集找到接口中定义的方法集，把具体类型实现的方法地址填入到iTab中的Fun方法集数组中去，供后面调用直接能找到函数地址
+	// 如果具体类型没有实现接口定义的方法，则会把Fun[0]设置为0，表示具体类型没有实现，会触发后面的panic
 	itabInit(m, true)
 	// 将m加入到缓存表itabTable
 	itabAdd(m)
@@ -274,6 +275,7 @@ imethods:
 		}
 		// didn't find method
 		// Leaves m.Fun[0] set to 0.
+		//这个具体的类型_type没有实现接口，把m.Fun[0]设置为0表示错误，没有实现接口
 		return iname
 	}
 	if firstTime {
