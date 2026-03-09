@@ -49,8 +49,8 @@ func itabHashFunc(inter *interfacetype, typ *_type) uintptr {
 // (1、根据接口类型+具体类型，先从iTab缓存中检查，如果有则直接返回
 // (2、创建一个iTab，并初始化(从具体类型的方法集中找到接口定义的需要实现的方法，填充到iTab的Fun数组中去)，加入到iTab缓存
 // 参数：
-// (1、inter：断言的接口类型的类型元数据
-// (2、type：空接口eface中的_type字段，具体类型的类型元数据
+// (1、inter：接口装箱或者断言时的接口类型的类型元数据
+// (2、type：_type字段，具体类型的类型元数据
 // (3、canfail：是否允许断言失败，true-允许断言失败，如果失败返回nil false-不允许断言失败，如果失败造成panic，对应着两种风格的类型断言：
 // r,ok := a.(io.Reader) 对应着canfail为true，如果失败ok为false
 // r := a.(io.Reader) 对应着canfail为false，如果失败会造成panic
