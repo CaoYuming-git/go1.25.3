@@ -45,13 +45,13 @@ func itabHashFunc(inter *interfacetype, typ *_type) uintptr {
 // Do not remove or change the type signature.
 // See go.dev/issue/67401.
 //
-// 生成一个iTab：
+// 接口断言或者接口装箱时，生成一个iTab：
 // (1、根据接口类型+具体类型，先从iTab缓存中检查，如果有则直接返回
 // (2、创建一个iTab，并初始化(从具体类型的方法集中找到接口定义的需要实现的方法，填充到iTab的Fun数组中去)，加入到iTab缓存
 // 参数：
-// (1、inter：接口的类型元数据
-// (2、type：具体类型的类型元数据
-// (3、canfail：是否允许失败，true-如果失败返回nil false-如果失败造成panic，对应着两种风格的类型断言：
+// (1、inter：断言的接口类型的类型元数据
+// (2、type：空接口eface中的_type字段，具体类型的类型元数据
+// (3、canfail：是否允许断言失败，true-允许断言失败，如果失败返回nil false-不允许断言失败，如果失败造成panic，对应着两种风格的类型断言：
 // r,ok := a.(io.Reader) 对应着canfail为true，如果失败ok为false
 // r := a.(io.Reader) 对应着canfail为false，如果失败会造成panic
 //
@@ -96,6 +96,7 @@ func getitab(inter *interfacetype, typ *_type, canfail bool) *itab {
 	// 缓存itabTable中没有，则根据接口定义的方法集数量来确定内存大小，创建一个新iTab
 	m = (*itab)(persistentalloc(unsafe.Sizeof(itab{})+uintptr(len(inter.Methods)-1)*goarch.PtrSize, 0, &memstats.other_sys))
 	m.Inter = inter
+	// itab的类型就是原始空接口中的_type类型
 	m.Type = typ
 	// The hash is used in type switches. However, compiler statically generates itab's
 	// for all interface/type pairs used in switches (which are added to itabTable
@@ -475,18 +476,22 @@ func convTslice(val []byte) (x unsafe.Pointer) {
 	return
 }
 
+// 接口断言：空接口断言非空接口类型，普通格式
 func assertE2I(inter *interfacetype, t *_type) *itab {
 	if t == nil {
 		// explicit conversions require non-nil interface value.
 		panic(&TypeAssertionError{nil, nil, &inter.Type, ""})
 	}
+	// 生成非空接口的iTab结构体
 	return getitab(inter, t, false)
 }
 
+// 接口断言：空接口断言非空接口类型，逗号格式
 func assertE2I2(inter *interfacetype, t *_type) *itab {
 	if t == nil {
 		return nil
 	}
+	//  生成非空接口的iTab结构体
 	return getitab(inter, t, true)
 }
 
