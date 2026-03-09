@@ -28,12 +28,14 @@ type ITab struct {
 // EmptyInterface describes the layout of a "interface{}" or a "any."
 // These are represented differently than non-empty interface, as the first
 // word always points to an abi.Type.
+// 空接口的结构，和runtime.eface等价，只不过不能使用runtime中未导出的类型定义，所以在reflect包中重新定义
 type EmptyInterface struct {
 	Type *Type
 	Data unsafe.Pointer
 }
 
 // NonEmptyInterface describes the layout of an interface that contains any methods.
+// 非空接口的结构，和runtime.iface等价，只不过不能使用runtime中未导出的类型定义，所以在reflect包中重新定义
 type NonEmptyInterface struct {
 	ITab *ITab
 	Data unsafe.Pointer
