@@ -7,4 +7,5 @@
 package abi
 
 // See comment in map_select_swiss.go.
+// map类型元数据
 type mapType = OldMapType

@@ -22,7 +22,7 @@ import (
 type Type struct {
 	//表示次类型的数据需要占用多少字节的存储空间
 	Size_ uintptr
-	// 表示数据的前多少字节包含指针，用来在写屏障时优化范围大小，比如某个struct类型占用32byte，但是只有第一个字段时指针类型，这个值就是8，剩下24字节不需要写屏障。在GC进行位图标记时使用
+	// 表示该类型的数据对象在内存中的前多少字节包含指针，用来在GC写屏障时优化范围大小，比如某个struct类型占用32byte，但是只有第一个字段时指针类型，这个值就是8，剩下24字节不需要写屏障。在GC进行位图标记时使用
 	PtrBytes uintptr // number of (prefix) bytes in the type that can contain pointers
 	//当前类型的hash值，会根据这个值构建map，加速类型查找比较
 	Hash uint32 // hash of type; avoids computation in hash tables
@@ -38,6 +38,8 @@ type Type struct {
 	FieldAlign_ uint8 // alignment of struct field with this type
 	//表示的底层类型，比如slice、map等等，然后按照sliceType、mapType来解析完整的类型结构信息
 	//如果是自定义类型，自定义类型都是基于基本类型来创建的，这里的Kind就是表示底层的基本类型
+	//低5位存类型，第6位表示该类型数据是否可以直接存储在interface中的data中
+	//比如如果是unsafe.Pointer类型(常量值为26)，且这个类型的的数据可以直接存储在interface的data上，所以这个kind值就是26|32 = 58
 	Kind_ Kind // enumeration for C
 	// function for comparing objects of this type
 	// (ptr to object A, ptr to object B) -> ==?
@@ -98,8 +100,10 @@ const (
 
 const (
 	// TODO (khr, drchase) why aren't these in TFlag?  Investigate, fix if possible.
+	// kind第6位表示该类型数据是否可以直接存储在interface中的data中
 	KindDirectIface Kind = 1 << 5
-	KindMask        Kind = (1 << 5) - 1
+	// kind的低5位表示类型
+	KindMask Kind = (1 << 5) - 1
 )
 
 // TFlag is used by a Type to signal what extra type information is
@@ -300,6 +304,7 @@ type Imethod struct {
 }
 
 // ArrayType represents a fixed array type.
+// 数组类型元数据
 type ArrayType struct {
 	Type
 	Elem  *Type // array element type
@@ -329,6 +334,7 @@ const (
 )
 
 // ChanType represents a channel type
+// 通道类型元数据
 type ChanType struct {
 	Type
 	Elem *Type
@@ -515,6 +521,7 @@ func (t *Type) Key() *Type {
 	return nil
 }
 
+// SliceType 切片类型元数据
 type SliceType struct {
 	Type
 	Elem *Type // slice element type
@@ -583,6 +590,7 @@ func (t *FuncType) IsVariadic() bool {
 	return t.OutCount&(1<<15) != 0
 }
 
+// PtrType 指针类型元数据
 type PtrType struct {
 	Type
 	Elem *Type // pointer element (pointed at) type
