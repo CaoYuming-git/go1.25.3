@@ -337,8 +337,10 @@ const (
 // 通道类型元数据
 type ChanType struct {
 	Type
+	// 元素的类型的类型元数据
 	Elem *Type
-	Dir  ChanDir
+	// channel方向(send、recv)
+	Dir ChanDir
 }
 
 type structTypeUncommon struct {

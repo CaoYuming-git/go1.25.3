@@ -22,10 +22,14 @@ const (
 	OldMapMaxElemBytes = 128 // Must fit in a uint8.
 )
 
+// OldMapType map的类型元数据
 type OldMapType struct {
 	Type
-	Key    *Type
-	Elem   *Type
+	// key的类型的类型元数据
+	Key *Type
+	// value的类型的类型元数据
+	Elem *Type
+	// 内部bucket的类型元数据
 	Bucket *Type // internal type representing a hash bucket
 	// function for hashing keys (ptr to key, seed) -> hash
 	Hasher     func(unsafe.Pointer, uintptr) uintptr
