@@ -524,6 +524,7 @@ func (t *Type) Key() *Type {
 // SliceType 切片类型元数据
 type SliceType struct {
 	Type
+	// 元素的类型元数据
 	Elem *Type // slice element type
 }
 
@@ -596,8 +597,11 @@ type PtrType struct {
 	Elem *Type // pointer element (pointed at) type
 }
 
+// StructField 字段描述信息
 type StructField struct {
-	Name   Name    // name is always non-empty
+	// 字段名
+	Name Name // name is always non-empty
+	// 字段类型的类型元数据
 	Typ    *Type   // type of field
 	Offset uintptr // byte offset of field
 }
@@ -606,10 +610,12 @@ func (f *StructField) Embedded() bool {
 	return f.Name.IsEmbedded()
 }
 
+// StructType 结构体类型元数据
 type StructType struct {
 	Type
 	PkgPath Name
-	Fields  []StructField
+	// 字段描述信息
+	Fields []StructField
 }
 
 // Name is an encoded type Name with optional extra data.
