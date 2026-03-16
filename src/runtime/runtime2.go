@@ -177,14 +177,20 @@ type funcval struct {
 
 // iface就是interface的简写，非空接口。就是非空接口类型的值的内存结构，不是接口的类型描述信息(类型元数据)
 type iface struct {
-	tab  *itab          // 具体类型实现某个接口的方法表：包含了接口类型的类型元数据、具体类型的类型元数据、具体类型实现接口的方法地址表，接口动态派发就是从这里找需要调用的函数的入口地址的
-	data unsafe.Pointer // 含义上和c的void * 类似，表明一个指针，可以指向任意类型的地址
+	// 具体类型实现某个接口的方法表：包含了接口类型的类型元数据、具体类型的类型元数据、具体类型实现接口的方法地址表，接口动态派发就是从这里找需要调用的函数的入口地址的
+	tab *itab
+	// 含义上和c的void * 类似，表明一个指针，可以指向任意类型的地址。
+	// 还有一个特殊情况(可忽略)，由于data实际就是一个16字节的结构，如果指向的类型的值足够小，值本身可以直接存储在data字段中。会在Type.Kind_字段中的第6位标记(KindDirectIface)
+	data unsafe.Pointer
 }
 
 // eface就是empty interface的简写，空接口，可以理解为是一个void *的增强版本，加上了类型信息。就是空接口类型的值的内存结构，不是接口的类型描述信息(类型元数据)
 type eface struct {
-	_type *_type         //描述data类型的类型元数据
-	data  unsafe.Pointer // 含义上和c的void * 类似，表明一个指针，可以指向任意类型的地址
+	//描述data类型的类型元数据
+	_type *_type
+	// 含义上和c的void * 类似，表明一个指针，可以指向任意类型的地址
+	// 还有一个特殊情况(可忽略)，由于data实际就是一个16字节的结构，如果指向的类型的值足够小，值本身可以直接存储在data字段中。会在Type.Kind_字段中的第6位标记(KindDirectIface)
+	data unsafe.Pointer
 }
 
 // 将any(interface{}空接口)类型转换为eface类型，interface空接口类型的内存结构本身就是eface，但是go语言层面上无法通过interface来访问eface中的属性，所以需要通过类型转换来访问其中的内部属性

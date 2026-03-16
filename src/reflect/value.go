@@ -151,14 +151,19 @@ func packEface(v Value) any {
 }
 
 // unpackEface converts the empty interface i to a Value.
+// 将eface转换为Value类型
 func unpackEface(i any) Value {
+	//转换为EmptyInterface(等价于eface)
 	e := (*abi.EmptyInterface)(unsafe.Pointer(&i))
 	// NOTE: don't read e.word until we know whether it is really a pointer or not.
+	// 类型元数据
 	t := e.Type
 	if t == nil {
 		return Value{}
 	}
+	// 获取底层类型结构
 	f := flag(t.Kind())
+	// 获取值是否直接存储在data上的标记(值足够小的情况)
 	if t.IfaceIndir() {
 		f |= flagIndir
 	}
@@ -3047,6 +3052,7 @@ func Indirect(v Value) Value {
 
 // ValueOf returns a new Value initialized to the concrete value
 // stored in the interface i. ValueOf(nil) returns the zero Value.
+// 将空接口i转换为Value，如果是空接口返回Value零值
 func ValueOf(i any) Value {
 	if i == nil {
 		return Value{}

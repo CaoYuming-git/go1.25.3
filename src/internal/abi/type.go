@@ -100,7 +100,9 @@ const (
 
 const (
 	// TODO (khr, drchase) why aren't these in TFlag?  Investigate, fix if possible.
-	// kind第6位表示该类型数据是否可以直接存储在interface中的data中
+	// 接口类型eface/iface中的data字段是一个16字节的字段，可以用于存储具体的值或者指向某个值的指针(大部分都视为一个指针)。
+	// 如果类型的值足够小(通常<=16字节，且不包含指针或复杂结构)，值本身可以直接存储在data字段中，用Kind_的第6位标记是否可以直接用data存储
+	// kind第6位表示该类型数据是否可以直接存储在interface中的data中，data是一个
 	KindDirectIface Kind = 1 << 5
 	// kind的低5位表示类型
 	KindMask Kind = (1 << 5) - 1
