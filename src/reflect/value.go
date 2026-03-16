@@ -36,13 +36,16 @@ import (
 // To compare two Values, compare the results of the Interface method.
 // Using == on two Values does not compare the underlying values
 // they represent.
+// 反射中表示一个类型的值，可用于操作值
 type Value struct {
 	// typ_ holds the type of the value represented by a Value.
 	// Access using the typ method to avoid escape of v.
+	// 表示值的类型
 	typ_ *abi.Type
 
 	// Pointer-valued data or, if flagIndir is set, pointer to data.
 	// Valid when either flagIndir is set or typ.pointers() is true.
+	// 指向数据的指针，或者直接表示值，就是接口类型中的Type.Kind_字段中的第6位标记(!KindDirectIface)
 	ptr unsafe.Pointer
 
 	// flag holds metadata about the value.
@@ -59,6 +62,12 @@ type Value struct {
 	//
 	// The remaining 22+ bits give a method number for method values.
 	// If flag.kind() != Func, code can assume that flagMethod is unset.
+	// 标记，至少32位，最低5位与type.Kind_的低5位一致(表示底层结构的类型)，其他的几位含义如下
+	// flagStickyRO：1<<5 未导出且非嵌入字段
+	// flagEmbedRO：1 << 6 未导出嵌入字段
+	// flagIndir：1 << 7 ptr存储的是值的地址，而不是值本身(即空接口中的_type的Kind_标记!KindDirectIface)
+	// flagAddr：1 << 8 ptr和flagIndir不为空
+	// flagMethod：1 << 9 是一个方法的值，此时高22位存储了方法在方法集中的序号
 	flag
 
 	// A method value represents a curried method invocation
@@ -163,7 +172,7 @@ func unpackEface(i any) Value {
 	}
 	// 获取底层类型结构
 	f := flag(t.Kind())
-	// 获取值是否直接存储在data上的标记(值足够小的情况)
+	// 获取值是否间接存储在data上的标记(data是否存的是指针)
 	if t.IfaceIndir() {
 		f |= flagIndir
 	}
@@ -3052,8 +3061,9 @@ func Indirect(v Value) Value {
 
 // ValueOf returns a new Value initialized to the concrete value
 // stored in the interface i. ValueOf(nil) returns the zero Value.
-// 将空接口i转换为Value，如果是空接口返回Value零值
+// 利用接口装箱，将空接口i转换为Value，如果类型和数据都为空，则返回一个无效的Value对象
 func ValueOf(i any) Value {
+	// 如果类型和数据都为空，则返回一个无效的Value对象
 	if i == nil {
 		return Value{}
 	}
