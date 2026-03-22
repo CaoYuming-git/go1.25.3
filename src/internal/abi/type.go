@@ -199,6 +199,7 @@ var kindNames = []string{
 }
 
 // TypeOf returns the abi.Type of some value.
+// 返回空接口类型的类型元数据
 func TypeOf(a any) *Type {
 	eface := *(*EmptyInterface)(unsafe.Pointer(&a))
 	// Types are either static (for compiler-created types) or

@@ -1308,6 +1308,7 @@ func (t *structType) FieldByName(name string) (f StructField, present bool) {
 
 // TypeOf returns the reflection [Type] that represents the dynamic type of i.
 // If i is a nil interface value, TypeOf returns nil.
+// 返回i的动态类型
 func TypeOf(i any) Type {
 	return toType(abi.TypeOf(i))
 }
