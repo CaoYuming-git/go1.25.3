@@ -112,20 +112,29 @@ func isEmpty(x uint8) bool {
 }
 
 // A header for a Go map.
+// map底层结构，不是map的类型元数据
 type hmap struct {
 	// Note: the format of the hmap is also encoded in cmd/compile/internal/reflectdata/reflect.go.
 	// Make sure this stays in sync with the compiler's definition.
-	count     int // # live cells == size of map.  Must be first (used by len() builtin)
-	flags     uint8
-	B         uint8  // log_2 of # of buckets (can hold up to loadFactor * 2^B items)
+	//键值对数量
+	count int // # live cells == size of map.  Must be first (used by len() builtin)
+	// map状态标识，可标记出map是否给goroutine并发读写
+	flags uint8
+	//桶数组长度的指数，2^B为桶的数量
+	B uint8 // log_2 of # of buckets (can hold up to loadFactor * 2^B items)
+	// 溢出桶的大致数量
 	noverflow uint16 // approximate number of overflow buckets; see incrnoverflow for details
-	hash0     uint32 // hash seed
-
-	buckets    unsafe.Pointer // array of 2^B Buckets. may be nil if count==0.
+	// hash种子，生成key的hash值会用到
+	hash0 uint32 // hash seed
+	// 桶数组指针
+	buckets unsafe.Pointer // array of 2^B Buckets. may be nil if count==0.
+	// 扩容过程中旧的桶数组指针
 	oldbuckets unsafe.Pointer // previous bucket array of half the size, non-nil only when growing
-	nevacuate  uintptr        // progress counter for evacuation (buckets less than this have been evacuated)
-	clearSeq   uint64
-
+	// 扩容时的迁移进度，小于这个进度的桶表示已经从旧的桶转迁移到了新的桶中
+	nevacuate uintptr // progress counter for evacuation (buckets less than this have been evacuated)
+	// todo 清理的序号？
+	clearSeq uint64
+	// 预申请的溢出桶
 	extra *mapextra // optional fields
 }
 
