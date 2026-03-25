@@ -157,6 +157,12 @@ type mapextra struct {
 
 // A bucket for a Go map.
 type bmap struct {
+	// 这里只显示声明tophash这一个属性，其实后面还隐式跟着下面三个字段
+	// 1、key [8]T  T->键的类型
+	// 2、values [8]T  T->值的类型
+	// 3、overflow uint8 溢出桶的指针
+	// 为什么不直接显示声明属性，因为键和值的类型都是不确定的，而在runtime一般不使用泛型
+	// 实际这个bamp式包含这四部分的，创建bmap时不是通过new(bmap)，而是通过newobject(t.Bucket),根据map类型元数据中的中OldMapType.Bucket.Size_字段的大小来创建的，这个Size_字段则是编译器计算的
 	// tophash generally contains the top byte of the hash value
 	// for each key in this bucket. If tophash[0] < minTopHash,
 	// tophash[0] is a bucket evacuation state instead.
