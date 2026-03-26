@@ -132,13 +132,14 @@ type hmap struct {
 	oldbuckets unsafe.Pointer // previous bucket array of half the size, non-nil only when growing
 	// 扩容时的迁移进度，小于这个进度的桶表示已经从旧的桶转迁移到了新的桶中
 	nevacuate uintptr // progress counter for evacuation (buckets less than this have been evacuated)
-	// todo 清理的序号？
+	// map被整体清空过多少次，会在map迭代器中用到，判断是不是在遍历过程中map被清空了
 	clearSeq uint64
 	// 预申请的溢出桶
 	extra *mapextra // optional fields
 }
 
 // mapextra holds fields that are not present on all maps.
+// 维护溢出桶的结构，因为bmap中存的是溢出桶的地址值数字(但是不是指针类型)，所以可能会被GC回收，这里用一个结构来指向溢出桶，防止被GC
 type mapextra struct {
 	// If both key and elem do not contain pointers and are inline, then we mark bucket
 	// type as containing no pointers. This avoids scanning such maps.
@@ -148,7 +149,9 @@ type mapextra struct {
 	// overflow contains overflow buckets for hmap.buckets.
 	// oldoverflow contains overflow buckets for hmap.oldbuckets.
 	// The indirection allows to store a pointer to the slice in hiter.
-	overflow    *[]*bmap
+	// 当前桶的所有溢出桶集合，这个数组里每个元素都是一个溢出桶的指针
+	overflow *[]*bmap
+	// 旧桶的溢出桶的集合
 	oldoverflow *[]*bmap
 
 	// nextOverflow holds a pointer to a free overflow bucket.
